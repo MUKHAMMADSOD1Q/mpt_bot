@@ -1,0 +1,45 @@
+{
+  "props": {
+    "pageProps": {
+      "seller": {
+        "id": 879,
+        "full_name": "Prezintatsiya .uz",
+        "bio": "Taqdimot tayorlash boʻyicha 5 yillik tajribaga egaman. Bizning xizmatlar markaziy Osiyoda yagona hisoblanadi!",
+        "phone": false,
+        "email": true,
+        "image": "https://d2co7bxjtnp5o.cloudfront.net/media/users/ortacha.jpg",
+        "progress_jobs_count": 0,
+        "created_at": "2024-03-18T10:51:11.947311",
+        "location": "Toshkent",
+        "last_login": "2026-09-19T11:01:54.359135",
+        "total_income": 734249,
+        "total_sold_documents": 64,
+        "total_products_count": 779,
+        "unsuccessful_jobs_count": 0,
+        "successful_jobs_count": 1,
+        "position": "Onlayn yordamchi",
+        "has_portfolio": true,
+        "has_service": true,
+        "direction": "business",
+        "service_count": 1,
+        "portfolio_count": 1,
+        "most_common_direction": "file",
+        "accepting_orders": true,
+        "is_blocked": false
+      }
+    },
+    "__N_SSP": true
+  },
+  "page": "/seller/[pid]",
+  "query": {
+    "pid": "879"
+  },
+  "buildId": "5FRTlCatn_mc1TM9EHC4Z",
+  "isFallback": false,
+  "dynamicIds": [
+    72775,
+    53362
+  ],
+  "gssp": true,
+  "scriptLoader": []
+}
