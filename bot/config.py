@@ -7,7 +7,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mpt_bot.db")
+# Railway'da Volume ulasangiz: DB_PATH=/data/mpt_bot.db (Volume mount yo'li /data bo'lsa)
+DB_PATH = os.getenv("DB_PATH") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "mpt_bot.db")
 
 # 1 MPT narxi (so'mda)
 MPT_PRICE_SOM = 200
@@ -45,11 +46,13 @@ CLICK_SECRET_KEY = os.getenv("CLICK_SECRET_KEY", "")
 # ---- Bot egasi (siz) — /admin buyrug'i FAQAT shu ID uchun ishlaydi ----
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 
-# ---- To'lov tasdiqlari yuboriladigan Telegram guruh ----
-# Guruh ID sini olish uchun botni guruhga admin qilib qo'shing va /groupid buyrug'ini yuboring
-PAYMENT_GROUP_ID = int(os.getenv("PAYMENT_GROUP_ID", "0")) if os.getenv("PAYMENT_GROUP_ID") else None
-ORDER_GROUP_ID = -1002397917281
-FILES_GROUP_ID = -1004449440402
+# ---- Uch xil ishchi guruh ----
+# 1) Yangi buyurtmalar (dastlabki ma'lumot + ikki marta tasdiqlangач "Qabul qilindi")
+ORDERS_GROUP_ID = int(os.getenv("ORDERS_GROUP_ID", "-1002397917281"))
+# 2) To'lovlar (karta chekini adminlar tasdiqlaydi / Click avtomatik tasdiqlanadi)
+PAYMENT_GROUP_ID = int(os.getenv("PAYMENT_GROUP_ID", "-1003180457594"))
+# 3) Userlar fayllari (tayyor ish shu yerga yuklanadi, bot userga yo'naltiradi)
+FILES_GROUP_ID = int(os.getenv("FILES_GROUP_ID", "-1004449440402"))
 
 # ---- To'g'ridan-to'g'ri kartaga o'tkazma uchun karta raqamlari ----
 CARD_NUMBERS = {
@@ -59,6 +62,9 @@ CARD_NUMBERS = {
     "MasterCard": ["5217 3959 0687 0052"],
 }
 CARD_OWNER_NAME = "Muhammadsodiq"
+
+# Karta to'lovi uchun ajratilgan vaqt (soniyada) - shundan keyin "5 daqiqa qo'shish / bekor qilish" so'raladi
+CARD_PAYMENT_TIMEOUT_SECONDS = 5 * 60
 
 # ---- AI xizmatlari (ixtiyoriy — sozlanmasa, tegishli funksiyalar o'chiq turadi) ----
 # Chekni tekshirish uchun (rasm/PDF tushunadi, bepul kvotasi bor): https://aistudio.google.com/apikey
@@ -72,6 +78,41 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 # ---- soff.uz sotuvchi sahifangiz ----
 SOFF_SELLER_ID = os.getenv("SOFF_SELLER_ID", "879")
 SOFF_SELLER_PANEL_URL = "https://seller.soff.uz/seller/products"
+SOFF_SELLER_PAGE_URL = f"https://soff.uz/seller/{SOFF_SELLER_ID}"
 
 # Har bir sahifada nechta mahsulot ko'rsatiladi
 SOFF_PAGE_SIZE = 10
+
+# ---- Aloqa va "biz haqimizda" ma'lumotlari ----
+CONTACT = {
+    "founder_dev": "https://t.me/MUKHAMMADSODlQ",
+    "founder_dev_extra": "https://t.me/MUHAMMADS0DlQ",
+    "support": "https://t.me/preuzadmin",
+    "phones": ["+998996665732", "+998901995732", "+998942881488"],
+}
+
+# ---- Mustaqil ishlar (referat/mustaqil ish/kurs ishi) — 1 sahifa narxi (so'm) ----
+INDEPENDENT_WORK_TYPES = {
+    "referat": {"title": "Referat", "price_per_page": 5000},
+    "mustaqil_ish": {"title": "Mustaqil ish", "price_per_page": 8000},
+    "kurs_ishi": {"title": "Kurs ishi", "price_per_page": 10000},
+    "boshqa": {"title": "Boshqa (admin bilan kelishiladi)", "price_per_page": None},
+}
+# O'zbek tilidan boshqa har qanday tilda bajarilsa, 1 sahifaga qo'shimcha narx (so'm)
+LANGUAGE_SURCHARGE_PER_PAGE = 1000
+WORK_LANGUAGES = ["O'zbek", "Rus", "Ingliz", "Boshqa"]
+
+# ---- "Tadbirkorlar uchun" xizmatlari narxlari ----
+TAKLIFNOMA_PRICE = 50_000
+REZYUME_PRICE = 50_000
+YOUTUBE_BANNER_PRICE = 50_000
+QR_GENERATOR_PRICE = 30_000
+UI_DESIGN_PRICE_RANGE = (500_000, 3_000_000)
+LOGO_PRICE_RANGE = (100_000, 5_000_000)
+WEBSITE_STYLE_PRICES = {
+    "minimalizm": (1_000_000, 2_000_000),
+    "zamonaviy": (2_000_000, 4_000_000),
+    "hi-tech": (4_000_000, 7_000_000),
+    "3d": (7_000_000, 10_000_000),
+    "boshqa": None,  # admin bilan kelishiladi
+}

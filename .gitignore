@@ -1,13 +1,16 @@
-.venv/
-venv/
-__pycache__/
-*.pyc
+# --- MAXFIY: hech qachon GitHub'ga yuklanmasin ---
 .env
 *.db
 *.sqlite
 *.sqlite3
-.idea/
-.vscode/
-*.db
-*.sqlite
-*.sqlite3
+DataBase.db
+
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Vaqtinchalik ---
+soff_debug.html
+soff_debug_next.json

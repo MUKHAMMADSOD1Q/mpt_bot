@@ -7,6 +7,7 @@ from bot.database import get_or_create_user, get_user
 from bot.keyboards import subscription_kb, mpt_topup_amounts_kb
 from bot.config import SUBSCRIPTIONS, ADMIN_USERNAME, MPT_PRICE_SOM
 from bot.services.payment_common import ask_payment_method
+from bot.texts import MPT_INFO, SUB_INFO
 
 router = Router()
 
@@ -22,16 +23,12 @@ def _balance_actions_kb():
 @router.message(F.text == "💳 Balans va obuna")
 async def balance_menu(message: Message):
     user = await get_or_create_user(message.from_user.id, message.from_user.username)
-    som_value = user['mpt_balance'] * MPT_PRICE_SOM
-    text = (
-        f"💰 Sizning balansingiz: <b>{user['mpt_balance']:.1f} MPT</b>\n"
-        f"💵 Mavjud so'm: <b>{som_value:,.0f} so'm</b>\n"
-    )
+    text = f"💰 Sizning balansingiz: <b>{user['mpt_balance']:.1f} MPT</b>\n"
     if user.get("subscription_type") and user.get("subscription_expiry"):
         text += f"📅 Faol obuna: {user['subscription_type']} (tugash sanasi: {user['subscription_expiry'][:10]})\n"
     text += (
         f"\nMPT sotib olish yoki obuna rasmiylashtirish uchun to'lov qiling, "
-        f"yoki to'g'ridan-to'g'ri @{ADMIN_USERNAME} ga murojaat qiling."
+        f"yoki to'g'ridan-to'g'ri @{ADMIN_USERNAME} ga murojaat qiling:"
     )
     await message.answer(text, parse_mode="HTML", reply_markup=_balance_actions_kb())
 
@@ -39,7 +36,8 @@ async def balance_menu(message: Message):
 @router.callback_query(F.data == "menu:buympt")
 async def show_mpt_amounts(callback: CallbackQuery):
     await callback.message.answer(
-        f"1 MPT — {MPT_PRICE_SOM} so'm. Nechta MPT sotib olmoqchisiz?",
+        f"{MPT_INFO}\n\nNechta MPT sotib olmoqchisiz?",
+        parse_mode="HTML",
         reply_markup=mpt_topup_amounts_kb(),
     )
     await callback.answer()
@@ -55,7 +53,7 @@ async def buy_mpt(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "menu:subs")
 async def show_subscriptions(callback: CallbackQuery):
-    await callback.message.answer("Obuna turini tanlang:", reply_markup=subscription_kb())
+    await callback.message.answer(f"{SUB_INFO}\n\nObuna turini tanlang:", parse_mode="HTML", reply_markup=subscription_kb())
     await callback.answer()
 
 

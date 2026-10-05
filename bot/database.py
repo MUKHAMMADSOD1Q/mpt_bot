@@ -15,16 +15,28 @@ async def init_db():
                 subscription_type TEXT,
                 subscription_expiry TEXT,
                 phone TEXT,
+                lang TEXT,
                 is_admin_mode INTEGER DEFAULT 0,
                 created_at TEXT
             )
         """)
-        # Eski bazalarda ustun bo'lmasligi mumkin - xavfsiz qo'shish
-        for column, coltype in [("phone", "TEXT"), ("is_admin_mode", "INTEGER DEFAULT 0")]:
-            try:
-                await db.execute(f"ALTER TABLE users ADD COLUMN {column} {coltype}")
-            except Exception:
-                pass
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS ready_products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                productname TEXT,
+                product_url TEXT UNIQUE
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS legacy_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER,
+                order_type TEXT,
+                order_name TEXT,
+                order_date TEXT,
+                UNIQUE(telegram_id, order_type, order_name, order_date)
+            )
+        """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS orders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +51,20 @@ async def init_db():
                 direction TEXT,
                 language TEXT,
                 status TEXT DEFAULT 'kutilmoqda',
+                group_message_id INTEGER,
+                created_at TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS service_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER,
+                service_type TEXT,
+                topic TEXT,
+                summary_text TEXT,
+                price_som REAL,
+                status TEXT DEFAULT 'kutilmoqda',
+                group_message_id INTEGER,
                 created_at TEXT
             )
         """)
@@ -51,6 +77,7 @@ async def init_db():
                 purpose TEXT,
                 payload TEXT,
                 status TEXT DEFAULT 'kutilmoqda',
+                group_message_id INTEGER,
                 created_at TEXT
             )
         """)
@@ -65,12 +92,30 @@ async def init_db():
                 receipt_type TEXT,
                 ai_verdict TEXT,
                 ai_note TEXT,
-                status TEXT DEFAULT 'tekshirilmoqda',
+                status TEXT DEFAULT 'chek_kutilmoqda',
+                group_message_id INTEGER,
                 created_at TEXT
             )
         """)
+        # Eski bazalarda ustunlar bo'lmasligi mumkin - xavfsiz qo'shish
+        migrations = [
+            ("users", "phone", "TEXT"),
+            ("users", "is_admin_mode", "INTEGER DEFAULT 0"),
+            ("users", "lang", "TEXT"),
+            ("orders", "paid_via", "TEXT"),
+            ("orders", "group_message_id", "INTEGER"),
+            ("click_payments", "group_message_id", "INTEGER"),
+            ("card_payments", "group_message_id", "INTEGER"),
+        ]
+        for table, column, coltype in migrations:
+            try:
+                await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+            except Exception:
+                pass
         await db.commit()
 
+
+# ---------------- USERS ----------------
 
 async def get_or_create_user(telegram_id: int, username: str | None) -> dict:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -134,6 +179,25 @@ async def update_user_phone(telegram_id: int, phone: str):
         await db.commit()
 
 
+async def set_admin_mode(telegram_id: int, enabled: bool):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET is_admin_mode = ? WHERE telegram_id = ?",
+            (1 if enabled else 0, telegram_id),
+        )
+        await db.commit()
+
+
+async def list_all_users() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM users ORDER BY created_at")
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+
+# ---------------- PRESENTATION ORDERS ----------------
+
 async def create_order(data: dict) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
@@ -160,25 +224,79 @@ async def get_order(order_id: int) -> dict | None:
         return dict(row) if row else None
 
 
-async def get_order_for_delivery(reference: str) -> dict | None:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        if reference.isdigit():
-            cur = await db.execute("SELECT * FROM orders WHERE id = ?", (int(reference),))
-        else:
-            cur = await db.execute(
-                "SELECT * FROM orders WHERE topic LIKE ? ORDER BY id DESC LIMIT 1",
-                (f"%{reference}%",),
-            )
-        row = await cur.fetchone()
-        return dict(row) if row else None
-
-
 async def set_order_status(order_id: int, status: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
         await db.commit()
 
+
+async def set_order_group_message(order_id: int, message_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE orders SET group_message_id = ? WHERE id = ?", (message_id, order_id))
+        await db.commit()
+
+
+async def list_pending_orders() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM orders WHERE status = 'kutilmoqda' ORDER BY id")
+        rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+
+# ---------------- SERVICE ORDERS (mustaqil ish, taklifnoma, logo, va h.k.) ----------------
+
+async def create_service_order(telegram_id: int, service_type: str, topic: str, summary_text: str, price_som: float) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """INSERT INTO service_orders (telegram_id, service_type, topic, summary_text, price_som, status, created_at)
+               VALUES (?, ?, ?, ?, ?, 'kutilmoqda', ?)""",
+            (telegram_id, service_type, topic, summary_text, price_som, datetime.datetime.utcnow().isoformat()),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_service_order(service_order_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM service_orders WHERE id = ?", (service_order_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def set_service_order_status(service_order_id: int, status: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE service_orders SET status = ? WHERE id = ?", (status, service_order_id))
+        await db.commit()
+
+
+async def set_service_order_group_message(service_order_id: int, message_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE service_orders SET group_message_id = ? WHERE id = ?", (message_id, service_order_id))
+        await db.commit()
+
+
+async def list_pending_files() -> list[dict]:
+    """Fayl kutilayotgan (to'lov qilingan, lekin hali fayl yuborilmagan) barcha
+    buyurtmalar — ham taqdimotlar (orders), ham xizmatlar (service_orders)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        result = []
+        cur = await db.execute("SELECT * FROM orders WHERE status = 'tolandi'")
+        for r in await cur.fetchall():
+            d = dict(r)
+            d["kind"] = "order"
+            result.append(d)
+        cur = await db.execute("SELECT * FROM service_orders WHERE status = 'tolandi'")
+        for r in await cur.fetchall():
+            d = dict(r)
+            d["kind"] = "service"
+            result.append(d)
+        return result
+
+
+# ---------------- CLICK TO'LOVLARI ----------------
 
 async def create_click_payment(telegram_id: int, merchant_trans_id: str, amount_som: float, purpose: str, payload: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -210,53 +328,22 @@ async def set_click_payment_status(merchant_trans_id: str, status: str):
         await db.commit()
 
 
-async def list_pending_orders() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM orders WHERE status = 'kutilmoqda' ORDER BY id")
-        rows = await cur.fetchall()
-        return [dict(r) for r in rows]
-
-
-async def set_admin_mode(telegram_id: int, enabled: bool):
+async def set_click_payment_group_message(merchant_trans_id: str, message_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE users SET is_admin_mode = ? WHERE telegram_id = ?",
-            (1 if enabled else 0, telegram_id),
+            "UPDATE click_payments SET group_message_id = ? WHERE merchant_trans_id = ?",
+            (message_id, merchant_trans_id),
         )
         await db.commit()
 
 
-async def list_all_users() -> list[dict]:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM users ORDER BY created_at")
-        rows = await cur.fetchall()
-        return [dict(r) for r in rows]
-
-
-async def get_total_paid_revenue() -> dict:
-    """Bot orqali qayd etilgan (Click + karta) tasdiqlangan to'lovlar yig'indisi.
-    DIQQAT: bu haqiqiy bank/karta balansi EMAS — faqat bot orqali o'tgan va
-    tasdiqlangan to'lovlarning yozuvi. Haqiqiy bank balansini faqat bankingiz
-    ilovasi/bank API orqali bilib olishingiz mumkin."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT COALESCE(SUM(amount_som), 0) AS total, COUNT(*) AS cnt FROM click_payments WHERE status = 'tolandi'")
-        click_row = dict(await cur.fetchone())
-        cur = await db.execute("SELECT COALESCE(SUM(amount_som), 0) AS total, COUNT(*) AS cnt FROM card_payments WHERE status = 'tasdiqlandi'")
-        card_row = dict(await cur.fetchone())
-        return {
-            "click_total": click_row["total"], "click_count": click_row["cnt"],
-            "card_total": card_row["total"], "card_count": card_row["cnt"],
-        }
-
+# ---------------- KARTA TO'LOVLARI ----------------
 
 async def create_card_payment(telegram_id: int, amount_som: float, purpose: str, payload: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
             """INSERT INTO card_payments (telegram_id, amount_som, purpose, payload, status, created_at)
-               VALUES (?, ?, ?, ?, 'tekshirilmoqda', ?)""",
+               VALUES (?, ?, ?, ?, 'chek_kutilmoqda', ?)""",
             (telegram_id, amount_som, purpose, payload, datetime.datetime.utcnow().isoformat()),
         )
         await db.commit()
@@ -266,7 +353,7 @@ async def create_card_payment(telegram_id: int, amount_som: float, purpose: str,
 async def attach_receipt(payment_id: int, file_id: str, file_type: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE card_payments SET receipt_file_id = ?, receipt_type = ? WHERE id = ?",
+            "UPDATE card_payments SET receipt_file_id = ?, receipt_type = ?, status = 'tekshirilmoqda' WHERE id = ?",
             (file_id, file_type, payment_id),
         )
         await db.commit()
@@ -287,9 +374,68 @@ async def set_card_payment_status(payment_id: int, status: str):
         await db.commit()
 
 
+async def set_card_payment_group_message(payment_id: int, message_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE card_payments SET group_message_id = ? WHERE id = ?", (message_id, payment_id))
+        await db.commit()
+
+
 async def get_card_payment(payment_id: int) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM card_payments WHERE id = ?", (payment_id,))
         row = await cur.fetchone()
         return dict(row) if row else None
+
+
+async def get_total_paid_revenue() -> dict:
+    """Bot orqali qayd etilgan (Click + karta) tasdiqlangan to'lovlar yig'indisi.
+    DIQQAT: bu haqiqiy bank/karta balansi EMAS — faqat bot orqali o'tgan va
+    tasdiqlangan to'lovlarning yozuvi. Haqiqiy bank balansini faqat bankingiz
+    ilovasi/bank API orqali bilib olishingiz mumkin."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT COALESCE(SUM(amount_som), 0) AS total, COUNT(*) AS cnt FROM click_payments WHERE status = 'tolandi'")
+        click_row = dict(await cur.fetchone())
+        cur = await db.execute("SELECT COALESCE(SUM(amount_som), 0) AS total, COUNT(*) AS cnt FROM card_payments WHERE status = 'tasdiqlandi'")
+        card_row = dict(await cur.fetchone())
+        return {
+            "click_total": click_row["total"], "click_count": click_row["cnt"],
+            "card_total": card_row["total"], "card_count": card_row["cnt"],
+        }
+
+
+# ---------------- TAYYOR MAHSULOTLAR (eski bazadan / zaxira ro'yxat) ----------------
+
+async def list_ready_products() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT productname, product_url FROM ready_products ORDER BY id")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def set_order_paid_via(order_id: int, paid_via: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE orders SET paid_via = ? WHERE id = ?", (paid_via, order_id))
+        await db.commit()
+
+
+async def set_service_order_price(service_order_id: int, price_som: float):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE service_orders SET price_som = ? WHERE id = ?", (price_som, service_order_id))
+        await db.commit()
+
+
+async def list_open_orders() -> list[dict]:
+    """Admin uchun: to'lov kutilayotgan yoki to'langan-u fayl yuborilmagan taqdimot buyurtmalari."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM orders WHERE status IN ('kutilmoqda', 'tolandi') ORDER BY id")
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def list_open_service_orders() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM service_orders WHERE status IN ('kutilmoqda', 'tolandi') ORDER BY id")
+        return [dict(r) for r in await cur.fetchall()]

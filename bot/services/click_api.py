@@ -23,11 +23,26 @@ import logging
 import aiohttp
 
 from bot.config import (
-    CLICK_SERVICE_ID, CLICK_MERCHANT_USER_ID, CLICK_SECRET_KEY,
+    CLICK_SERVICE_ID, CLICK_MERCHANT_ID, CLICK_MERCHANT_USER_ID, CLICK_SECRET_KEY,
 )
 
 API_BASE = "https://api.click.uz/v2/merchant"
+CHECKOUT_BASE = "https://my.click.uz/services/pay"
 logger = logging.getLogger(__name__)
+
+
+def build_checkout_url(amount_som: float, merchant_trans_id: str, return_url: str = "") -> str:
+    """Click'ning ommaviy to'lov havolasi ("Checkout Link"). Bu havola brauzerda
+    ham, Click ilovasi o'rnatilgan bo'lsa ilovada ham ochiladi (OS darajasidagi
+    "universal link" xatti-harakati orqali) — alohida push-so'rov yuborish shart emas.
+    """
+    url = (
+        f"{CHECKOUT_BASE}?service_id={CLICK_SERVICE_ID}&merchant_id={CLICK_MERCHANT_ID}"
+        f"&amount={amount_som}&transaction_param={merchant_trans_id}"
+    )
+    if return_url:
+        url += f"&return_url={return_url}"
+    return url
 
 
 class ClickAPIError(Exception):

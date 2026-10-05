@@ -22,6 +22,7 @@ haqiqiy API manzilini aniqlab, shu faylni yangilaymiz.
 
 import json
 import re
+import time
 import logging
 
 import aiohttp
@@ -31,6 +32,9 @@ from bot.config import SOFF_SELLER_ID
 logger = logging.getLogger(__name__)
 
 SELLER_PAGE_URL = f"https://soff.uz/seller/{SOFF_SELLER_ID}"
+PRODUCT_URL_TMPL = "https://soff.uz/product/{slug}"  # eski bazadagi havolalardan aniqlangan format
+_CACHE: dict = {"ts": 0.0, "items": []}
+_CACHE_TTL = 300  # soniya
 
 _NEXT_DATA_RE = re.compile(
     r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.DOTALL
@@ -86,6 +90,9 @@ async def fetch_seller_products(page: int = 1, search: str | None = None) -> lis
     Agar hech narsa topilmasa — bo'sh ro'yxat qaytaradi (xato tashlamaydi),
     shunda bot foydalanuvchiga "hozircha mavjud emas" deb ko'rsata oladi.
     """
+    if _CACHE["items"] and time.time() - _CACHE["ts"] < _CACHE_TTL:
+        return _filter(_CACHE["items"], search)
+
     try:
         html = await _fetch_html(SELLER_PAGE_URL)
     except Exception:
@@ -103,21 +110,19 @@ async def fetch_seller_products(page: int = 1, search: str | None = None) -> lis
     products = []
     for item in raw_list:
         name = item.get("name") or item.get("title") or "Nomsiz mahsulot"
-        if search and search.lower() not in str(name).lower():
-            continue
-        slug = item.get("slug") or item.get("id") or item.get("link") or item.get("url")
-        url = None
-        if slug:
-            if isinstance(slug, str) and slug.startswith("http"):
-                url = slug
-            else:
-                url = f"https://soff.uz/seller/{SOFF_SELLER_ID}/product/{slug}"
+        slug = item.get("slug") or item.get("id")
+        url = PRODUCT_URL_TMPL.format(slug=slug) if isinstance(slug, str) and not slug.isdigit() else SELLER_PAGE_URL
         products.append({
-            "name": name,
-            "price": item.get("price") or item.get("cost") or item.get("amount") or "-",
-            "slug": slug,
-            "image": item.get("image") or item.get("cover") or item.get("photo"),
-            "url": url or f"https://soff.uz/seller/{SOFF_SELLER_ID}",
+            "name": str(name),
+            "price": item.get("price") or item.get("cost") or item.get("amount") or "",
+            "url": url,
         })
+    _CACHE["ts"], _CACHE["items"] = time.time(), products
+    return _filter(products, search)
 
-    return products
+
+def _filter(products: list[dict], search: str | None) -> list[dict]:
+    if not search:
+        return products
+    q = search.lower()
+    return [p for p in products if q in p["name"].lower()]

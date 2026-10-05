@@ -365,6 +365,85 @@ yozilgan (`CARD_NUMBERS`, `CARD_OWNER_NAME`) — xohlasangiz shu faylda o'zgarti
 
 ---
 
+## 9. ESKI BAZANI KO'CHIRISH, GITHUB'GA YUKLASH VA RAILWAY'GA JOYLASH
+
+### 9.1 Eski foydalanuvchilar bazasini import qilish
+
+Eski botingizdagi `DataBase.db` faylida **8 340 ta noyob foydalanuvchi**, ularning
+telefon raqamlari (bo'lsa), tili, eski buyurtmalar tarixi va 15 ta tayyor mahsulot bor.
+Bularni yangi botga qo'shish uchun:
+
+1. Botni ishga tushiring (lokal yoki serverda) va o'zingiz (`OWNER_ID`) shaxsiy chatda botga yozing.
+2. `DataBase.db` faylini botga **hujjat (fayl) sifatida** yuboring, izoh (caption) qismiga
+   aynan `/importdb` deb yozing.
+3. Bot faylni tekshirib, avtomatik import qiladi va hisobot beradi (nechta yangi
+   foydalanuvchi qo'shildi, nechtasi allaqachon bor edi, nechtasida haqiqiy telefon
+   raqami bor va h.k.).
+4. Import **qayta-qayta xavfsiz ishga tushirilishi mumkin** — mavjud foydalanuvchilar
+   ustidan yozilmaydi, faqat bo'sh maydonlar to'ldiriladi.
+5. Eski bazadagi 4 ta admin ID hisobotda ko'rsatiladi — agar ularni ham admin
+   qilmoqchi bo'lsangiz, `.env` dagi `ADMIN_IDS` ga o'zingiz qo'shasiz.
+
+MPT balansi eski bazada yo'q edi, shuning uchun barcha import qilingan foydalanuvchilar
+balansi `0` dan boshlanadi — xohlasangiz `/addmpt` orqali qo'lda qo'shib chiqishingiz mumkin.
+
+### 9.2 GitHub'ga yuklash
+
+```bash
+cd mpt_bot
+git init
+git add .
+git commit -m "MPT bot - to'liq versiya"
+git branch -M main
+git remote add origin https://github.com/<username>/mpt-bot.git
+git push -u origin main
+```
+
+`.gitignore` fayli `.env` va `*.db` fayllarni avtomatik chetlab o'tadi — tokeningiz va
+foydalanuvchilar bazangiz GitHub'ga **hech qachon** yuklanmaydi. `DataBase.db`
+faylini ham hech qachon qo'lda `git add` qilmang.
+
+### 9.3 Railway'ga joylash (bosqichma-bosqich)
+
+**Muhim narx eslatmasi:** Railway'da endi doimiy bepul tarif yo'q — yangi hisobga
+30 kunlik yoki $5 gacha bo'lgan bir martalik sinov krediti beriladi, shundan keyin
+kamida **Hobby ($5/oy)** tarifiga o'tish kerak bo'ladi. Kichik bot (baza + doimiy
+ishlaydigan Python jarayoni) uchun oyiga taxminan $5-10 atrofida xarajat kutilsin.
+Agar butunlay bepul variant kerak bo'lsa, Oracle Cloud Free Tier (doimiy bepul, lekin
+sozlash birmuncha texnik) yoki boshqa VPS'ga o'tishni tavsiya qilaman — xohlasangiz shu
+yo'l bo'yicha ham qadamlarni yozib beraman.
+
+1. https://railway.app ga GitHub akkauntingiz bilan kiring (kredit karta so'ralishi mumkin,
+   hozircha haqiqiy pul yechilmaydi).
+2. **New Project → Deploy from GitHub repo** → `mpt-bot` repongizni tanlang.
+3. Railway loyihani avtomatik aniqlaydi (`railway.json` va `requirements.txt` orqali).
+4. **Variables** bo'limiga `.env.example` dagi barcha o'zgaruvchilarni kiriting:
+   `BOT_TOKEN`, `ADMIN_IDS`, `OWNER_ID`, `CLICK_*`, `GEMINI_API_KEY` va h.k.
+5. **Ma'lumotlar bazasi yo'qolib qolmasligi uchun Volume ulang** (muhim!):
+   Railway loyihangizda **+ New → Volume** tugmasini bosing, mount path sifatida
+   `/data` kiriting, so'ng **Variables** bo'limida `DB_PATH=/data/mpt_bot.db` qo'shing.
+   Volume bo'lmasa, Railway konteynerni har safar qayta ishga tushirganda (deploy,
+   restart) bazangiz **o'chib ketadi** — bu eng ko'p uchraydigan xato.
+6. **Deploy** tugmasini bosing. Bir necha daqiqadan so'ng bot ishga tushadi (loglarni
+   Railway paneli ichidan kuzatib turishingiz mumkin).
+7. Botingizga `/start` yozib tekshiring, so'ng shaxsiy chatda `DataBase.db` faylini
+   `/importdb` bilan yuboring (9.1-bo'lim).
+8. Vaqti-vaqti bilan (masalan haftada bir) shaxsiy chatda `/backupdb` buyrug'ini
+   yuborib, bazangizning zaxira nusxasini oling va xavfsiz joyda saqlang — Volume
+   ishonchli bo'lsa-da, qo'shimcha zaxira hech qachon ortiqcha emas.
+
+### 9.4 Keyingi safar kod yangilansa
+
+```bash
+git add .
+git commit -m "Yangilanish tavsifi"
+git push
+```
+Railway GitHub'ga ulangan bo'lgani uchun har bir `push`dan keyin **avtomatik qayta
+deploy** qiladi — qo'shimcha amal talab qilinmaydi.
+
+---
+
 Savol tug'ilsa yoki keyingi bosqichlardan birini (masalan, to'liq pptx generatsiya,
 Payme integratsiyasi, yoki webhook'ga o'tish) birga qilib ko'rishni xohlasangiz —
 istalgan vaqtda ayting, shu loyiha ustida davom ettiraman.

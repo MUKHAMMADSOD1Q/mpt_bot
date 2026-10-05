@@ -1,35 +1,158 @@
-from aiogram import Router, F, Bot
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+import datetime
 
-from bot.states import OrderPresentation
-from bot.keyboards import tariff_kb, confirm_order_kb, skip_kb, main_menu_kb, admin_order_kb
+from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message, CallbackQuery, User
+
+from bot.states import OrderPresentation, OrderConfirm, PreCal
+from bot.keyboards import (
+    skip_kb, language_choice_kb, presentation_entry_kb, precal_tariff_kb, precal_approve_kb,
+)
 from bot.services.validators import is_valid_topic, is_valid_pages, is_valid_full_name, is_valid_optional_text
 from bot.services.pricing import calculate_price, format_som
-from bot.config import MIN_PAGES, MAX_PAGES, ORDER_GROUP_ID
-from bot.database import create_order, deduct_mpt_balance, get_user
-from bot.services.payment_common import ask_payment_method
+from bot.services.group_orders import begin_confirmation
+from bot.config import MIN_PAGES, MAX_PAGES, TARIFFS
+from bot.database import get_user
+from bot.keyboards import tariff_kb
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 router = Router()
 
 
+# ==================== KIRISH: buyurtma yoki PreCal ====================
+
 @router.message(F.text == "📊 Taqdimotga buyurtma berish")
-async def start_order(message: Message, state: FSMContext):
-    await state.set_state(OrderPresentation.waiting_topic)
+async def presentation_entry(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer(
+        "Nima qilmoqchisiz?\n\n"
+        "🧮 <b>PreCal</b> — buyurtma bermasdan taqdimot narxini hisoblab ko'rish.",
+        parse_mode="HTML",
+        reply_markup=presentation_entry_kb(),
+    )
+
+
+@router.callback_query(F.data == "pres:order")
+async def start_order(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(OrderPresentation.waiting_topic)
+    await callback.message.answer(
         "Mavzu nomini kiriting:\n\n"
         "<i>Mavzu nomini imkon qadar aniq va tushunarli kiriting! "
         "Mavzu nomi taqdimotingizga to'g'ridan-to'g'ri ta'sir qilishi mumkin!</i>",
         parse_mode="HTML",
     )
+    await callback.answer()
 
+
+# ==================== PRECAL ====================
+
+@router.callback_query(F.data == "pres:precal")
+async def precal_start(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await state.set_state(PreCal.waiting_tariff)
+    await callback.message.answer(
+        "🧮 <b>PreCal</b> — qaysi ta'rifda hisoblaymiz?\n\n"
+        "<i>Narxlar taqdimotning bir sahifasi uchun ko'rsatilgan.</i>",
+        parse_mode="HTML",
+        reply_markup=precal_tariff_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(PreCal.waiting_tariff, F.data.startswith("precal_t:"))
+async def precal_tariff(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(tariff=callback.data.split(":", 1)[1])
+    await state.set_state(PreCal.waiting_pages)
+    await callback.message.answer("Taqdimot nechta sahifali bo'lsin?")
+    await callback.answer()
+
+
+@router.message(PreCal.waiting_pages)
+async def precal_pages(message: Message, state: FSMContext):
+    ok, value = is_valid_pages(message.text or "", MIN_PAGES, MAX_PAGES)
+    if not ok:
+        await message.answer(f"Iltimos, faqat raqam kiriting ({MIN_PAGES}-{MAX_PAGES} oralig'ida).")
+        return
+    await state.update_data(pages=value)
+    await state.set_state(PreCal.waiting_language)
+    await message.answer("Taqdimot qaysi tilda bo'lsin?", reply_markup=language_choice_kb("precal_lang"))
+
+
+async def _show_precal_result(message: Message, state: FSMContext):
+    data = await state.get_data()
+    p = calculate_price(data["tariff"], data["pages"], data["language"])
+    extra = ""
+    if p["surcharge_per_page_som"]:
+        extra = f"\n🌐 Chet tili uchun +{format_som(p['surcharge_per_page_som'])} so'm/sahifa hisobga olingan."
+    await state.set_state(PreCal.waiting_approval)
+    await message.answer(
+        f"🧮 <b>Hisob-kitob</b>\n\n"
+        f"Ta'rif: <b>{p['tariff_title']}</b>\nSahifalar: {p['pages']}\nTil: {data['language']}\n"
+        f"1 sahifa: {format_som(p['price_per_page_som'])} so'm{extra}\n\n"
+        f"💰 Jami: <b>{format_som(p['price_som'])} so'm</b> ({p['price_mpt']:.1f} MPT)\n\n"
+        "Narx ma'qulmi?",
+        parse_mode="HTML",
+        reply_markup=precal_approve_kb(),
+    )
+
+
+@router.callback_query(PreCal.waiting_language, F.data.startswith("precal_lang:"))
+async def precal_language(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(language=callback.data.split(":", 1)[1])
+    await callback.answer()
+    await _show_precal_result(callback.message, state)
+
+
+@router.callback_query(PreCal.waiting_approval, F.data == "precal_ok")
+async def precal_approved(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(precal=True)
+    await state.set_state(OrderPresentation.waiting_topic)
+    await callback.message.answer("Ajoyib! Endi taqdimot mavzusini kiriting:")
+    await callback.answer()
+
+
+@router.callback_query(PreCal.waiting_approval, F.data == "precal_cheaper")
+async def precal_cheaper(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current = TARIFFS[data["tariff"]]["som"]
+    cheaper = [(k, t) for k, t in TARIFFS.items() if t["som"] < current]
+    if not cheaper:
+        await callback.message.answer("Bu allaqachon eng arzon ta'rif 🙂 Xohlasangiz, sahifalar sonini kamaytirib ko'ring.")
+        await callback.answer()
+        return
+    builder = InlineKeyboardBuilder()
+    lines = ["💸 <b>Arzonroq ta'riflar</b> (sizning sahifa soni va tilingiz bo'yicha):\n"]
+    for key, t in reversed(cheaper):
+        p = calculate_price(key, data["pages"], data["language"])
+        lines.append(f"• {t['title']} — {format_som(p['price_som'])} so'm")
+        builder.button(text=f"{t['title']} — {format_som(p['price_som'])} so'm", callback_data=f"precal_pick:{key}")
+    builder.adjust(1)
+    await callback.message.answer("\n".join(lines), parse_mode="HTML", reply_markup=builder.as_markup())
+    await callback.answer()
+
+
+@router.callback_query(PreCal.waiting_approval, F.data.startswith("precal_pick:"))
+async def precal_pick(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(tariff=callback.data.split(":", 1)[1])
+    await callback.answer()
+    await _show_precal_result(callback.message, state)
+
+
+# ==================== ODDIY BUYURTMA OQIMI ====================
 
 @router.message(OrderPresentation.waiting_topic)
 async def process_topic(message: Message, state: FSMContext):
-    if not is_valid_topic(message.text):
+    if not is_valid_topic(message.text or ""):
         await message.answer("Iltimos, mavzu nomini to'g'ri kiriting (kamida 2 ta belgidan iborat, faqat raqam bo'lmasin).")
         return
     await state.update_data(topic=message.text.strip())
+    data = await state.get_data()
+    if data.get("precal"):  # sahifa soni PreCal da allaqachon aniqlangan
+        await state.set_state(OrderPresentation.waiting_fullname)
+        await message.answer("Taqdimot yuzi uchun o'z ism-familiyangizni (otasini ismi ixtiyoriy) kiriting:")
+        return
     await state.set_state(OrderPresentation.waiting_pages)
     await message.answer(
         "Taqdimotingiz nechta sahifali bo'lsin? Kiriting:\n\n"
@@ -40,7 +163,7 @@ async def process_topic(message: Message, state: FSMContext):
 
 @router.message(OrderPresentation.waiting_pages)
 async def process_pages(message: Message, state: FSMContext):
-    ok, value = is_valid_pages(message.text, MIN_PAGES, MAX_PAGES)
+    ok, value = is_valid_pages(message.text or "", MIN_PAGES, MAX_PAGES)
     if not ok:
         await message.answer(f"Iltimos, faqat raqam kiriting ({MIN_PAGES}-{MAX_PAGES} oralig'ida).")
         return
@@ -51,7 +174,7 @@ async def process_pages(message: Message, state: FSMContext):
 
 @router.message(OrderPresentation.waiting_fullname)
 async def process_fullname(message: Message, state: FSMContext):
-    if not is_valid_full_name(message.text):
+    if not is_valid_full_name(message.text or ""):
         await message.answer("Kiritilgan jumla ism emas. Iltimos isminizni kiriting!")
         return
     await state.update_data(full_name=message.text.strip())
@@ -66,7 +189,7 @@ async def process_fullname(message: Message, state: FSMContext):
 
 @router.message(OrderPresentation.waiting_institution)
 async def process_institution(message: Message, state: FSMContext):
-    if not is_valid_optional_text(message.text):
+    if not is_valid_optional_text(message.text or ""):
         await message.answer("Iltimos, muassasa nomini to'g'ri kiriting yoki o'tkazib yuboring.")
         return
     await state.update_data(institution=message.text.strip())
@@ -90,148 +213,105 @@ async def ask_direction(message: Message, state: FSMContext):
     )
 
 
+async def after_direction(message: Message, state: FSMContext, from_user: User):
+    data = await state.get_data()
+    if data.get("precal"):  # ta'rif va til PreCal da tanlangan — to'g'ridan-to'g'ri xulosaga
+        await build_summary(message, state, data["tariff"], from_user)
+    else:
+        await ask_language(message, state)
+
+
 @router.message(OrderPresentation.waiting_direction)
 async def process_direction(message: Message, state: FSMContext):
-    if not is_valid_optional_text(message.text):
+    if not is_valid_optional_text(message.text or ""):
         await message.answer("Iltimos, yo'nalish/guruh nomini to'g'ri kiriting yoki o'tkazib yuboring.")
         return
     await state.update_data(direction=message.text.strip())
-    await ask_language(message, state)
+    await after_direction(message, state, message.from_user)
 
 
 @router.callback_query(OrderPresentation.waiting_direction, F.data == "skip")
 async def skip_direction(callback: CallbackQuery, state: FSMContext):
     await state.update_data(direction="")
     await callback.answer()
-    await ask_language(callback.message, state)
+    await after_direction(callback.message, state, callback.from_user)
 
 
 async def ask_language(message: Message, state: FSMContext):
     await state.set_state(OrderPresentation.waiting_language)
     await message.answer(
         "Taqdimot qaysi tilda tayyorlansin?\n"
-        "<i>(Ixtiyoriy — kiritmasangiz, standart til tanlanadi: O'zbekcha)</i>",
+        f"<i>O'zbek tilidan boshqa tillarda narx sahifasiga +1.000 so'm (Bepul ta'rifda yo'q).</i>",
         parse_mode="HTML",
-        reply_markup=skip_kb(),
+        reply_markup=language_choice_kb("pres_lang"),
     )
 
 
-@router.message(OrderPresentation.waiting_language)
-async def process_language(message: Message, state: FSMContext):
-    await state.update_data(language=message.text.strip())
-    await ask_tariff(message, state)
-
-
-@router.callback_query(OrderPresentation.waiting_language, F.data == "skip")
-async def skip_language(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(language="O'zbekcha")
+@router.callback_query(OrderPresentation.waiting_language, F.data.startswith("pres_lang:"))
+async def process_language(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    await ask_tariff(callback.message, state)
+    await state.update_data(language=callback.data.split(":", 1)[1])
+    await ask_tariff(callback.message, state, edit=True)
 
 
-async def ask_tariff(message: Message, state: FSMContext):
+async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
     await state.set_state(OrderPresentation.waiting_tariff)
-    await message.answer("Ta'rif turini tanlang:", reply_markup=tariff_kb())
+    text = (
+        "Ta'rif turini tanlang:\n\n"
+        "<i>Narxlar taqdimotning bir sahifasi uchun ko'rsatilgan.</i>"
+    )
+    if edit:
+        try:
+            await message.edit_text(text, parse_mode="HTML", reply_markup=tariff_kb())
+            return
+        except TelegramBadRequest:
+            pass
+    await message.answer(text, parse_mode="HTML", reply_markup=tariff_kb())
 
 
 @router.callback_query(OrderPresentation.waiting_tariff, F.data.startswith("tariff:"))
 async def process_tariff(callback: CallbackQuery, state: FSMContext):
-    tariff_key = callback.data.split(":", 1)[1]
-    data = await state.get_data()
-    pricing = calculate_price(tariff_key, data["pages"])
-    await state.update_data(tariff=tariff_key, **pricing)
+    await callback.answer()
+    await build_summary(callback.message, state, callback.data.split(":", 1)[1], callback.from_user)
 
-    text = (
+
+async def build_summary(message: Message, state: FSMContext, tariff_key: str, from_user: User):
+    data = await state.get_data()
+    language = data.get("language") or "O'zbek"
+    pricing = calculate_price(tariff_key, data["pages"], language)
+
+    telegram_id = from_user.id
+    user = await get_user(telegram_id)
+    phone = (user.get("phone") if user else None) or "O'tkazib yuborgan"
+    username = from_user.username or "-"
+
+    group_lines = [
+        f"👤 Ism: {data['full_name']}",
+        f"🔗 Username: @{username}",
+        f"📞 Telefon raqam: {phone}",
+        f"📄 Prezentatsiya turi: {pricing['tariff_title']}",
+        f"📝 Prezentatsiya mavzusi: {data['topic']}",
+        f"📑 Sahifalar soni: {data['pages']}",
+        f"🌐 Til: {language}",
+        f"💵 1 sahifa uchun narx: {format_som(pricing['price_per_page_som'])}",
+        f"💰 Umumiy narx: {format_som(pricing['price_som'])}",
+        f"USER_ID: {telegram_id}",
+        f"🕒 Sana/vaqt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}",
+    ]
+
+    preview = (
         f"Siz, <b>{pricing['tariff_title']}</b> tarif rejasida, "
-        f"“{data['topic']}” mavzusida {data['pages']}ta sahifali taqdimot tayyorlamoqchisiz.\n\n"
+        f"“{data['topic']}” mavzusida {data['pages']}ta sahifali ({language}) taqdimot tayyorlamoqchisiz.\n\n"
         f"Buyurtmaning umumiy narxi — <b>{format_som(pricing['price_som'])} so'm</b> "
-        f"({pricing['price_mpt']:.1f} MPT).\n\n"
-        "Buyurtmani tasdiqlashni istasangiz <b>Generate</b> tugmasini bosing, "
-        "bekor qilish uchun <b>Bekor qilish</b> tugmasini bosing."
+        f"({pricing['price_mpt']:.1f} MPT).\n\nTasdiqlaysizmi?"
     )
-    await state.set_state(OrderPresentation.confirm)
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=confirm_order_kb())
-    await callback.answer()
-
-
-@router.callback_query(OrderPresentation.confirm, F.data == "order:cancel")
-async def cancel_order(callback: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await callback.message.answer("Buyurtma bekor qilindi.", reply_markup=main_menu_kb())
-    await callback.answer()
-
-
-@router.callback_query(OrderPresentation.confirm, F.data == "order:confirm")
-async def confirm_order(callback: CallbackQuery, state: FSMContext, bot: Bot):
-    data = await state.get_data()
-    user_id = callback.from_user.id
-
-    # Agar tarif pullik bo'lsa, MPT balansidan yechishga urinib ko'ramiz.
-    # Agar MPT yetarli bo'lmasa, buyurtma "admin tasdig'i kutilmoqda" holatida qoladi
-    # va foydalanuvchiga to'lov/balans to'ldirish yo'llari taklif qilinadi.
-    mpt_needed = data["price_mpt"]
-    paid_with_mpt = False
-    if mpt_needed > 0:
-        paid_with_mpt = await deduct_mpt_balance(user_id, mpt_needed)
-
-    order_id = await create_order({
-        "telegram_id": user_id,
-        "topic": data["topic"],
-        "pages": data["pages"],
-        "tariff": data["tariff"],
-        "price_som": data["price_som"],
-        "price_mpt": data["price_mpt"],
-        "full_name": data["full_name"],
-        "institution": data.get("institution"),
-        "direction": data.get("direction"),
-        "language": data.get("language"),
-    })
-
-    if mpt_needed == 0 or paid_with_mpt:
-        await callback.message.answer(
-            f"✅ Buyurtmangiz (№{order_id}) qabul qilindi! Tez orada tayyor taqdimotingiz yuboriladi.",
-            reply_markup=main_menu_kb(),
-        )
-        await bot.send_message(
-            ORDER_GROUP_ID,
-            _order_admin_text(order_id, data, callback.from_user, paid=True),
-            reply_markup=admin_order_kb(order_id),
-        )
-        await state.clear()
-    else:
-        user = await get_user(user_id)
-        balance = user["mpt_balance"] if user else 0
-        await callback.message.answer(
-            f"⚠️ Buyurtmangiz (№{order_id}) qayd etildi, lekin balansingizda yetarli MPT yo'q "
-            f"(kerak: {mpt_needed:.1f} MPT, mavjud: {balance:.1f} MPT).\n\n"
-            "To'lovni Click yoki karta orqali amalga oshirishingiz mumkin:",
-        )
-        # DIQQAT: state.clear() chaqirilmaydi — ask_payment_method uchun state ochiq qoladi
-        await ask_payment_method(callback.message, state, purpose="order", amount_som=data["price_som"], payload=str(order_id))
-        await bot.send_message(
-            ORDER_GROUP_ID,
-            _order_admin_text(order_id, data, callback.from_user, paid=False),
-            reply_markup=admin_order_kb(order_id),
-        )
-
-    await callback.answer()
-
-
-def _order_admin_text(order_id: int, data: dict, user, paid: bool) -> str:
-    status = "✅ MPT bilan to'landi" if paid else "❌ To'lov kutilmoqda"
-    phone = data.get("phone") or "O'tkazib yuborgan"
-    return (
-        f"🆕 Yangi buyurtma №{order_id}\n"
-        f"Foydalanuvchi: @{user.username or '-'} (id: {user.id})\n"
-        f"USER_ID: {user.id}\n"
-        f"Telefon: {phone}\n"
-        f"Mavzu: {data['topic']}\n"
-        f"Sahifalar: {data['pages']}\n"
-        f"Tarif: {data['tariff_title']}\n"
-        f"Narx: {format_som(data['price_som'])} so'm / {data['price_mpt']:.1f} MPT\n"
-        f"Ism: {data['full_name']}\n"
-        f"Muassasa: {data.get('institution') or '-'}\n"
-        f"Yo'nalish: {data.get('direction') or '-'}\n"
-        f"Til: {data.get('language') or '-'}\n"
-        f"Holat: {status}"
+    await begin_confirmation(
+        message, state,
+        flow_kind="presentation",
+        tariff=tariff_key, language=language, **pricing,
+        topic=data["topic"], full_name=data["full_name"],
+        institution=data.get("institution", ""), direction=data.get("direction", ""),
+        telegram_id=telegram_id,
+        group_lines=group_lines,
+        preview_text=preview,
     )
