@@ -2,6 +2,7 @@ from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
+from bot.config import OWNER_ID
 from bot.database import get_or_create_user
 from bot.keyboards import main_menu_kb, admin_menu_kb, contact_kb, games_kb
 from bot.texts import ABOUT_US_HTML, build_guide, chunk_text
@@ -9,8 +10,8 @@ from bot.texts import ABOUT_US_HTML, build_guide, chunk_text
 router = Router()
 
 
-def _menu_for(user: dict):
-    return admin_menu_kb() if user.get("is_admin_mode") else main_menu_kb()
+def _menu_for(user: dict, user_id: int):
+    return admin_menu_kb(super_admin=user_id == OWNER_ID) if user.get("is_admin_mode") else main_menu_kb()
 
 
 @router.message(CommandStart())
@@ -22,13 +23,13 @@ async def cmd_start(message: Message):
         "hujjatlar va boshqa xizmatlarni tez va sifatli tayyorlashda yordam beruvchi botman.\n\n"
         "Quyidagi menyudan kerakli bo'limni tanlang:"
     )
-    await message.answer(text, reply_markup=_menu_for(user))
+    await message.answer(text, reply_markup=_menu_for(user, message.from_user.id))
 
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message):
     user = await get_or_create_user(message.from_user.id, message.from_user.username)
-    await message.answer("Bosh menyu:", reply_markup=_menu_for(user))
+    await message.answer("Bosh menyu:", reply_markup=_menu_for(user, message.from_user.id))
 
 
 @router.message(F.text == "🤖 Sun'iy intellekt yordamida")

@@ -4,14 +4,18 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.config import TARIFFS, SUBSCRIPTIONS, INDEPENDENT_WORK_TYPES, WORK_LANGUAGES, WEBSITE_STYLE_PRICES
 
 
-def admin_menu_kb() -> ReplyKeyboardMarkup:
+def admin_menu_kb(super_admin: bool = False) -> ReplyKeyboardMarkup:
     kb = [
         [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="🧾 Kutayotgan buyurtmalar")],
         [KeyboardButton(text="👤 Foydalanuvchiga xabar"), KeyboardButton(text="📢 Barchaga xabar")],
         [KeyboardButton(text="🛍 Soff.uz'ga yuklash")],
+    ]
+    if super_admin:
+        kb.append([KeyboardButton(text="👥 Adminlarni boshqarish")])
+    kb.extend([
         [KeyboardButton(text="⬅️ Ortga")],
         [KeyboardButton(text="🔙 Oddiy rejimga qaytish")],
-    ]
+    ])
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 

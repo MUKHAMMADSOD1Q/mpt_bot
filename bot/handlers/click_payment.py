@@ -7,10 +7,11 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import ADMIN_IDS, OWNER_ID, PAYMENT_GROUP_ID
+from bot.config import PAYMENT_GROUP_ID
 from bot.database import (
     create_click_payment, get_click_payment, get_user, set_click_payment_group_message,
     set_click_payment_status, update_user_phone,
+    list_admin_ids,
 )
 from bot.keyboards import (
     click_app_choice_kb, click_game_answers_kb, click_game_done_kb, click_phone_kb, click_wait_kb,
@@ -65,7 +66,7 @@ async def _notify_click_payment_group(merchant_trans_id: str, channel: str, bot:
             "Click to'lovini guruhga yuborib bo'lmadi (chat_id=%s, mti=%s)",
             PAYMENT_GROUP_ID, merchant_trans_id,
         )
-        for admin_id in dict.fromkeys(ADMIN_IDS + [OWNER_ID]):
+        for admin_id in await list_admin_ids():
             if not admin_id:
                 continue
             try:

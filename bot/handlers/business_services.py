@@ -1,5 +1,3 @@
-import datetime
-
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
@@ -9,7 +7,7 @@ from bot.keyboards import (
     business_services_kb, skip_kb, skip_or_upload_kb, ui_platform_kb, business_size_kb, website_style_kb,
 )
 from bot.services.pricing import format_som
-from bot.services.group_orders import begin_confirmation
+from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import (
     TAKLIFNOMA_PRICE, REZYUME_PRICE, YOUTUBE_BANNER_PRICE, QR_GENERATOR_PRICE,
     UI_DESIGN_PRICE_RANGE, LOGO_PRICE_RANGE, WEBSITE_STYLE_PRICES,
@@ -19,7 +17,7 @@ router = Router()
 
 
 def _now() -> str:
-    return datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
+    return tashkent_timestamp()
 
 
 async def _user_header(from_user) -> list[str]:

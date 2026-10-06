@@ -1,5 +1,3 @@
-import datetime
-
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
@@ -8,7 +6,7 @@ from bot.states import IndependentWork
 from bot.keyboards import independent_work_type_kb, yes_no_kb, language_choice_kb
 from bot.services.validators import is_valid_topic, is_valid_pages
 from bot.services.pricing import format_som
-from bot.services.group_orders import begin_confirmation
+from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import MIN_PAGES, MAX_PAGES, INDEPENDENT_WORK_TYPES, LANGUAGE_SURCHARGE_PER_PAGE
 from bot.database import get_user
 
@@ -106,7 +104,7 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
         f"🌐 Til: {language}",
         f"💰 Narx: {price_text}",
         f"USER_ID: {telegram_id}",
-        f"🕒 Sana/vaqt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}",
+        f"🕒 Sana/vaqt: {tashkent_timestamp()}",
     ]
 
     preview = (

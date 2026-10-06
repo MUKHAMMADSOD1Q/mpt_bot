@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, FSInputFile
 
-from bot.config import DB_PATH, ADMIN_IDS, PAYMENT_GROUP_ID, SUBSCRIPTIONS, OWNER_ID, SOFF_SELLER_PANEL_URL, TARIFFS
+from bot.config import DB_PATH, PAYMENT_GROUP_ID, SUBSCRIPTIONS, OWNER_ID, SOFF_SELLER_PANEL_URL, TARIFFS
 from bot.states import AdminBroadcast, AdminSetPrice
 from bot.keyboards import admin_menu_kb, main_menu_kb
 from bot.services.pricing import format_som
@@ -18,14 +18,15 @@ from bot.services.payment_common import subscription_covers, send_payment_reques
 from bot.database import (
     add_mpt_balance, get_user, set_subscription, set_admin_mode, list_all_users,
     get_total_paid_revenue, get_or_create_user, list_open_orders, list_open_service_orders,
-    get_service_order, set_service_order_price,
+    get_service_order, set_service_order_price, is_admin_user, list_admin_ids,
+    add_admin, remove_admin,
 )
 
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS or user_id == OWNER_ID
+async def is_admin(user_id: int) -> bool:
+    return await is_admin_user(user_id)
 
 
 # ==================== REJIM ====================
@@ -33,20 +34,23 @@ def is_admin(user_id: int) -> bool:
 @router.message(Command("admin"))
 async def toggle_admin_mode(message: Message):
     """Adminlar uchun admin rejimini almashtiradi."""
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     user = await get_or_create_user(message.from_user.id, message.from_user.username)
     new_mode = not bool(user.get("is_admin_mode"))
     await set_admin_mode(message.from_user.id, new_mode)
     if new_mode:
-        await message.answer("🛠 Admin rejasi yoqildi.", reply_markup=admin_menu_kb())
+        await message.answer(
+            "🛠 Admin rejasi yoqildi.",
+            reply_markup=admin_menu_kb(super_admin=message.from_user.id == OWNER_ID),
+        )
     else:
         await message.answer("👤 Oddiy foydalanuvchi rejasiga qaytdingiz.", reply_markup=main_menu_kb())
 
 
 @router.message(F.text == "🔙 Oddiy rejimga qaytish")
 async def back_to_user_mode(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     await set_admin_mode(message.from_user.id, False)
     await message.answer("👤 Oddiy foydalanuvchi rejasiga qaytdingiz.", reply_markup=main_menu_kb())
@@ -61,7 +65,7 @@ async def cmd_groupid(message: Message):
 
 @router.message(Command("testpaymentgroup"))
 async def test_payment_group(message: Message, bot: Bot):
-    if not is_admin(message.from_user.id) or message.chat.type != "private":
+    if not await is_admin(message.from_user.id) or message.chat.type != "private":
         return
     try:
         sent = await bot.send_message(PAYMENT_GROUP_ID, "🔎 Botning to'lovlar guruhi aloqasi tekshirildi.")
@@ -75,6 +79,54 @@ async def test_payment_group(message: Message, bot: Bot):
         f"xabar ID: <code>{sent.message_id}</code>.",
         parse_mode="HTML",
     )
+
+
+@router.message(F.text == "👥 Adminlarni boshqarish")
+async def show_admin_management(message: Message):
+    if message.from_user.id != OWNER_ID or message.chat.type != "private":
+        await message.answer("Bu bo'lim faqat superadmin uchun.")
+        return
+    admins = await list_admin_ids()
+    admin_list = "\n".join(f"• <code>{admin_id}</code>" for admin_id in admins) or "Hozircha admin yo'q."
+    await message.answer(
+        "👥 <b>Adminlarni boshqarish</b>\n\n"
+        f"{admin_list}\n\n"
+        "Admin tayinlash: <code>/addadmin TELEGRAM_ID</code>\n"
+        "Adminlikni bekor qilish: <code>/removeadmin TELEGRAM_ID</code>",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("addadmin"))
+async def cmd_addadmin(message: Message):
+    if message.from_user.id != OWNER_ID or message.chat.type != "private":
+        await message.answer("Bu amal faqat superadmin uchun.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+        await message.answer("Foydalanish: /addadmin TELEGRAM_ID")
+        return
+    telegram_id = int(parts[1])
+    await add_admin(telegram_id)
+    await message.answer(f"✅ <code>{telegram_id}</code> admin sifatida tayinlandi.", parse_mode="HTML")
+
+
+@router.message(Command("removeadmin"))
+async def cmd_removeadmin(message: Message):
+    if message.from_user.id != OWNER_ID or message.chat.type != "private":
+        await message.answer("Bu amal faqat superadmin uchun.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+        await message.answer("Foydalanish: /removeadmin TELEGRAM_ID")
+        return
+    telegram_id = int(parts[1])
+    if await remove_admin(telegram_id):
+        await message.answer(f"✅ <code>{telegram_id}</code> adminlikdan olindi.", parse_mode="HTML")
+    elif await is_admin(telegram_id):
+        await message.answer("Bu admin .env sozlamasi orqali belgilangan va paneldan olib tashlanmaydi.")
+    else:
+        await message.answer("Bu Telegram ID tayinlangan adminlar ro'yxatida yo'q.")
 
 
 # ==================== ESKI BAZANI IMPORT QILISH ====================
@@ -161,7 +213,7 @@ async def backup_db(message: Message, bot: Bot):
 
 @router.message(F.text == "📊 Statistika")
 async def admin_stats(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     users = await list_all_users()
     revenue = await get_total_paid_revenue()
@@ -183,7 +235,7 @@ def _sub_line(user: dict | None) -> str:
 
 @router.message(F.text == "🧾 Kutayotgan buyurtmalar")
 async def admin_pending(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     orders = await list_open_orders()
     services = await list_open_service_orders()
@@ -198,6 +250,10 @@ async def admin_pending(message: Message):
         phone = (user.get("phone") if user else None) or "yo'q"
         balance = user["mpt_balance"] if user else 0
         tariff_title = TARIFFS.get(o["tariff"], {}).get("title", o["tariff"])
+        full_name = o.get("full_name") or "yo'q"
+        institution = o.get("institution") or "O'tkazib yuborgan"
+        direction = o.get("direction") or "O'tkazib yuborgan"
+        language = o.get("language") or "yo'q"
         if o["status"] == "tolandi":
             state_line = f"✅ To'langan ({o.get('paid_via') or '-'}) — fayl kutilmoqda"
         elif subscription_covers(user, o["tariff"]):
@@ -210,6 +266,10 @@ async def admin_pending(message: Message):
             f"🎓 Taqdimot №{o['id']}\n"
             f"USER_ID: {o['telegram_id']}\n📞 Raqam: {phone}\n🔗 Nickname: {nick}\n"
             f"📝 Mavzu: {o['topic']}\n📑 Sahifa: {o['pages']}\n📄 Ta'rif: {tariff_title}\n"
+            f"👤 Ism: {full_name}\n"
+            f"🏫 Ta'lim muassasasi: {institution}\n"
+            f"🎓 Yo'nalish/guruh: {direction}\n"
+            f"🌐 Til: {language}\n"
             f"💰 Balans: {balance:.1f} MPT | Obuna: {_sub_line(user)}\n"
             f"💳 Shu ish uchun: {o['price_mpt']:.1f} MPT / {format_som(o['price_som'])} so'm\n"
             f"📌 Holat: {state_line}"
@@ -219,10 +279,13 @@ async def admin_pending(message: Message):
         nick = f"@{user['username']}" if user and user.get("username") else "yo'q"
         phone = (user.get("phone") if user else None) or "yo'q"
         price = format_som(sv["price_som"]) + " so'm" if sv["price_som"] else "kelishiladi"
-        chunks.append(
+        summary = sv.get("summary_text") or (
             f"🛠 Xizmat №{sv['id']} ({sv['service_type']})\n"
             f"USER_ID: {sv['telegram_id']}\n📞 Raqam: {phone}\n🔗 Nickname: {nick}\n"
-            f"📝 Mavzu: {sv['topic']}\n💰 Narx: {price}\n📌 Holat: {sv['status']}"
+            f"📝 Mavzu: {sv['topic']}"
+        )
+        chunks.append(
+            f"{summary}\n💰 Joriy narx: {price}\n📌 Holat: {sv['status']}"
         )
 
     buf = ""
@@ -237,7 +300,7 @@ async def admin_pending(message: Message):
 
 @router.message(F.text == "🛍 Soff.uz'ga yuklash")
 async def admin_soff_upload(message: Message):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     await message.answer(
         "Yangi mahsulot yuklash uchun sotuvchi panelingizga o'ting:\n"
@@ -252,7 +315,7 @@ async def admin_soff_upload(message: Message):
 
 @router.message(F.text == "👤 Foydalanuvchiga xabar")
 async def admin_msg_one_start(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     await state.set_state(AdminBroadcast.waiting_target_id)
     await message.answer("Foydalanuvchining Telegram ID raqamini kiriting:")
@@ -260,54 +323,76 @@ async def admin_msg_one_start(message: Message, state: FSMContext):
 
 @router.message(AdminBroadcast.waiting_target_id)
 async def admin_msg_one_get_id(message: Message, state: FSMContext):
+    if not await is_admin(message.from_user.id):
+        await state.clear()
+        return
     if not (message.text or "").strip().isdigit():
         await message.answer("Iltimos, faqat raqam (Telegram ID) kiriting.")
         return
     await state.update_data(target_id=int(message.text.strip()))
     await state.set_state(AdminBroadcast.waiting_single_message)
-    await message.answer("Endi yuboriladigan xabar matnini kiriting:")
+    await message.answer("Endi yuboriladigan xabar yoki faylni yuboring:")
 
 
 @router.message(AdminBroadcast.waiting_single_message)
 async def admin_msg_one_send(message: Message, state: FSMContext, bot: Bot):
+    if not await is_admin(message.from_user.id):
+        await state.clear()
+        return
     data = await state.get_data()
     try:
-        await bot.send_message(data["target_id"], message.text)
-        await message.answer("✅ Xabar yuborildi.", reply_markup=admin_menu_kb())
+        await bot.copy_message(
+            chat_id=data["target_id"], from_chat_id=message.chat.id, message_id=message.message_id
+        )
+        await message.answer(
+            "✅ Xabar yuborildi.",
+            reply_markup=admin_menu_kb(super_admin=message.from_user.id == OWNER_ID),
+        )
     except Exception as e:
-        await message.answer(f"⚠️ Xabar yuborilmadi: {e}", reply_markup=admin_menu_kb())
+        await message.answer(
+            f"⚠️ Xabar yuborilmadi: {e}",
+            reply_markup=admin_menu_kb(super_admin=message.from_user.id == OWNER_ID),
+        )
     await state.clear()
 
 
 @router.message(F.text == "📢 Barchaga xabar")
 async def admin_broadcast_start(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     await state.set_state(AdminBroadcast.waiting_broadcast_message)
-    await message.answer("Barcha foydalanuvchilarga yuboriladigan xabar matnini kiriting:")
+    await message.answer("Barcha foydalanuvchilarga yuboriladigan xabar yoki faylni yuboring:")
 
 
 @router.message(AdminBroadcast.waiting_broadcast_message)
 async def admin_broadcast_send(message: Message, state: FSMContext, bot: Bot):
+    if not await is_admin(message.from_user.id):
+        await state.clear()
+        return
     users = await list_all_users()
     await state.clear()
     await message.answer(f"Yuborish boshlandi ({len(users)} foydalanuvchiga). Bu bir necha daqiqa olishi mumkin...")
     sent, failed = 0, 0
     for user in users:
         try:
-            await bot.send_message(user["telegram_id"], message.text)
+            await bot.copy_message(
+                chat_id=user["telegram_id"], from_chat_id=message.chat.id, message_id=message.message_id
+            )
             sent += 1
         except Exception:
             failed += 1  # botni bloklaganlar va h.k.
         await asyncio.sleep(0.05)  # Telegram flood-limitiga tushmaslik uchun
-    await message.answer(f"✅ Yuborildi: {sent} ta, xato: {failed} ta.", reply_markup=admin_menu_kb())
+    await message.answer(
+        f"✅ Yuborildi: {sent} ta, xato: {failed} ta.",
+        reply_markup=admin_menu_kb(super_admin=message.from_user.id == OWNER_ID),
+    )
 
 
 # ==================== NARX BELGILASH (kelishiladigan xizmatlar) ====================
 
 @router.callback_query(F.data.startswith("svc_setprice:"))
 async def svc_setprice_start(callback: CallbackQuery, state: FSMContext):
-    if not is_admin(callback.from_user.id):
+    if not await is_admin(callback.from_user.id):
         await callback.answer("Ruxsat yo'q.", show_alert=True)
         return
     service_order_id = int(callback.data.split(":", 1)[1])
@@ -321,7 +406,7 @@ async def svc_setprice_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminSetPrice.waiting_amount)
 async def svc_setprice_amount(message: Message, state: FSMContext, bot: Bot):
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     raw = (message.text or "").replace(" ", "").replace(".", "").replace(",", "")
     if not raw.isdigit() or int(raw) <= 0:
@@ -351,7 +436,7 @@ async def svc_setprice_amount(message: Message, state: FSMContext, bot: Bot):
 @router.message(Command("addmpt"))
 async def cmd_addmpt(message: Message):
     """/addmpt <telegram_id> <miqdor>"""
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) != 3:
@@ -371,7 +456,7 @@ async def cmd_addmpt(message: Message):
 @router.message(Command("addsub"))
 async def cmd_addsub(message: Message):
     """/addsub <telegram_id> <tarif_kaliti>"""
-    if not is_admin(message.from_user.id):
+    if not await is_admin(message.from_user.id):
         return
     parts = message.text.split()
     if len(parts) != 3 or parts[2] not in SUBSCRIPTIONS:

@@ -196,8 +196,8 @@ ham yozib beraman).
 
 - `.env` faylini hech qachon GitHub'ga yoki boshqa ochiq joyga yubormang — u sizning
   bot tokeningizni o'z ichiga oladi.
-- Admin buyruqlari (`/addmpt`, `/addsub`) faqat `ADMIN_IDS` ro'yxatidagilar uchun ishlaydi —
-  boshqa ID qo'shmang.
+- Admin buyruqlari (`/addmpt`, `/addsub`) faqat `OWNER_ID`, `ADMIN_IDS` yoki superadmin
+  panelidan tayinlangan adminlar uchun ishlaydi. Admin huquqini faqat ishonchli akkauntlarga bering.
 - Production'ga chiqishdan oldin, `main.py` ichidagi `logging.basicConfig(level=logging.INFO)`
   darajasini kamaytiring va xatoliklarni fayllarga yozib borishni sozlang.
 
@@ -229,20 +229,23 @@ sizga (barcha `ADMIN_IDS`) chek rasmi + "✅ Tasdiqlash / ❌ Rad etish" tugmala
 > kafolat emas — katta summalarda baribir o'zingiz ko'zdan kechirib turishni tavsiya
 > qilaman, ayniqsa boshida.
 
-### 8.2 Admin/User rejimi — FAQAT siz uchun
+### 8.2 Admin/User rejimi va adminlarni boshqarish
 
-`/admin` buyrug'ini yuborsangiz (faqat sizning ID'ingiz uchun ishlaydi, boshqa hech kim
-buni sinab ko'rmaydi va sezmaydi ham — buyruqqa hech qanday javob qaytmaydi), bot
-sizning suhbatingizda **Admin menyu**ga o'tadi:
+`/admin` buyrug'ini `OWNER_ID`, `ADMIN_IDS` yoki superadmin tayinlagan admin yuborsa,
+bot shu akkaunt uchun **Admin menyu**ni ochadi:
 
 - 📊 **Statistika** — foydalanuvchilar soni, Click/Karta orqali qayd etilgan to'lovlar yig'indisi
-- 👤 **Foydalanuvchiga xabar** — ID bo'yicha bittaga
-- 📢 **Barchaga xabar** — hamma foydalanuvchiga
+- 👤 **Foydalanuvchiga xabar** — ID bo'yicha bittaga; matn yoki fayl/media
+- 📢 **Barchaga xabar** — hamma foydalanuvchiga; xabar ham, fayl/media ham yuboriladi
 - 🧾 **Kutayotgan buyurtmalar**
 - 🛍 **Soff.uz'ga yuklash** — eslatma/havola (pastga qarang)
+- 👥 **Adminlarni boshqarish** — faqat superadmin ko'radi; `/addadmin TELEGRAM_ID`
+  va `/removeadmin TELEGRAM_ID` buyruqlari bilan tayinlash/bekor qilish
 - 🔙 **Oddiy rejimga qaytish**
 
 `.env` faylida `OWNER_ID` ni o'zingizning Telegram ID'ingizga o'rnating.
+Tayinlangan adminlar bazada saqlanadi. Tayyor fayllar guruhida ham tayinlangan adminlar
+buyurtma xabariga reply qilib yoki `/send order-ID` / `/send service-ID` bilan fayl yuborishi mumkin.
 
 **Muhim cheklov:** Bot orqali sizning haqiqiy **bank/karta balansingizni** ko'rish
 imkonsiz — buning uchun bank bilan rasmiy API shartnomasi kerak bo'ladi (YaTT
@@ -381,8 +384,8 @@ Bularni yangi botga qo'shish uchun:
    raqami bor va h.k.).
 4. Import **qayta-qayta xavfsiz ishga tushirilishi mumkin** — mavjud foydalanuvchilar
    ustidan yozilmaydi, faqat bo'sh maydonlar to'ldiriladi.
-5. Eski bazadagi 4 ta admin ID hisobotda ko'rsatiladi — agar ularni ham admin
-   qilmoqchi bo'lsangiz, `.env` dagi `ADMIN_IDS` ga o'zingiz qo'shasiz.
+5. Eski bazadagi 4 ta admin ID hisobotda ko'rsatiladi — ularni admin qilmoqchi
+   bo'lsangiz, superadmin panelidagi **Adminlarni boshqarish** orqali tayinlang.
 
 MPT balansi eski bazada yo'q edi, shuning uchun barcha import qilingan foydalanuvchilar
 balansi `0` dan boshlanadi — xohlasangiz `/addmpt` orqali qo'lda qo'shib chiqishingiz mumkin.

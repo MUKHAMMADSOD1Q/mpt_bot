@@ -4,8 +4,11 @@ from aiogram import Router, F, Bot
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
-from bot.config import FILES_GROUP_ID, ADMIN_IDS
-from bot.database import get_order, get_service_order, set_order_status, set_service_order_status, list_pending_files
+from bot.config import FILES_GROUP_ID
+from bot.database import (
+    get_order, get_service_order, set_order_status, set_service_order_status,
+    list_pending_files, is_admin_user,
+)
 
 router = Router()
 
@@ -59,7 +62,7 @@ async def list_pending(message: Message):
 
 @router.message(F.chat.id == FILES_GROUP_ID, F.reply_to_message, F.document | F.photo)
 async def forward_file_by_reply(message: Message, bot: Bot):
-    if message.from_user.id not in ADMIN_IDS:
+    if not message.from_user or not await is_admin_user(message.from_user.id):
         return
     original = message.reply_to_message.text or message.reply_to_message.caption or ""
     match = REF_RE.search(original)
@@ -75,7 +78,7 @@ async def forward_file_by_reply(message: Message, bot: Bot):
 
 @router.message(Command("send"), F.chat.id == FILES_GROUP_ID, F.document | F.photo)
 async def send_file_by_number(message: Message, bot: Bot, command: CommandObject):
-    if not message.from_user or message.from_user.id not in ADMIN_IDS:
+    if not message.from_user or not await is_admin_user(message.from_user.id):
         return
 
     match = SEND_RE.fullmatch((command.args or "").strip())

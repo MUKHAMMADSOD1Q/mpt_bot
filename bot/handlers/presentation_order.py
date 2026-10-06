@@ -1,5 +1,3 @@
-import datetime
-
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -11,7 +9,7 @@ from bot.keyboards import (
 )
 from bot.services.validators import is_valid_topic, is_valid_pages, is_valid_full_name, is_valid_optional_text
 from bot.services.pricing import calculate_price, format_som
-from bot.services.group_orders import begin_confirmation
+from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import MIN_PAGES, MAX_PAGES, TARIFFS
 from bot.database import get_user
 from bot.keyboards import tariff_kb
@@ -284,11 +282,15 @@ async def build_summary(message: Message, state: FSMContext, tariff_key: str, fr
     user = await get_user(telegram_id)
     phone = (user.get("phone") if user else None) or "O'tkazib yuborgan"
     username = from_user.username or "-"
+    institution = data.get("institution") or "O'tkazib yuborgan"
+    direction = data.get("direction") or "O'tkazib yuborgan"
 
     group_lines = [
         f"👤 Ism: {data['full_name']}",
         f"🔗 Username: @{username}",
         f"📞 Telefon raqam: {phone}",
+        f"🏫 Ta'lim muassasasi: {institution}",
+        f"🎓 Yo'nalish/guruh: {direction}",
         f"📄 Prezentatsiya turi: {pricing['tariff_title']}",
         f"📝 Prezentatsiya mavzusi: {data['topic']}",
         f"📑 Sahifalar soni: {data['pages']}",
@@ -296,7 +298,7 @@ async def build_summary(message: Message, state: FSMContext, tariff_key: str, fr
         f"💵 1 sahifa uchun narx: {format_som(pricing['price_per_page_som'])}",
         f"💰 Umumiy narx: {format_som(pricing['price_som'])}",
         f"USER_ID: {telegram_id}",
-        f"🕒 Sana/vaqt: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}",
+        f"🕒 Sana/vaqt: {tashkent_timestamp()}",
     ]
 
     preview = (

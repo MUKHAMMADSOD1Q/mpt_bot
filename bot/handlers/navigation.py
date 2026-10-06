@@ -2,6 +2,7 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from bot.config import OWNER_ID
 from bot.keyboards import (
     admin_menu_kb, business_services_kb, business_size_kb, click_app_choice_kb, click_wait_kb, independent_work_type_kb,
     language_choice_kb, main_menu_kb, precal_tariff_kb,
@@ -198,5 +199,8 @@ async def go_back(message: Message, state: FSMContext):
     else:
         await state.clear()
         user = await get_user(message.from_user.id)
-        markup = admin_menu_kb() if user and user.get("is_admin_mode") else main_menu_kb()
+        markup = (
+            admin_menu_kb(super_admin=message.from_user.id == OWNER_ID)
+            if user and user.get("is_admin_mode") else main_menu_kb()
+        )
         await message.answer("Menyuga qaytdingiz.", reply_markup=markup)

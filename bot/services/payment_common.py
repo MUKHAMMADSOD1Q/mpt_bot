@@ -6,18 +6,18 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import ADMIN_IDS, OWNER_ID, SUBSCRIPTIONS, PAYMENT_GROUP_ID, FILES_GROUP_ID, TARIFFS
+from bot.config import SUBSCRIPTIONS, PAYMENT_GROUP_ID, FILES_GROUP_ID, TARIFFS
 from bot.services.pricing import format_som
 from bot.database import (
     add_mpt_balance, set_subscription, set_order_status, get_order, get_user,
-    get_service_order, set_service_order_status, set_order_paid_via,
+    get_service_order, set_service_order_status, set_order_paid_via, is_admin_user,
 )
 
 logger = logging.getLogger(__name__)
 
 
 async def is_payment_admin(user_id: int, bot: Bot) -> bool:
-    if user_id in ADMIN_IDS or user_id == OWNER_ID:
+    if await is_admin_user(user_id):
         return True
     try:
         member = await bot.get_chat_member(PAYMENT_GROUP_ID, user_id)

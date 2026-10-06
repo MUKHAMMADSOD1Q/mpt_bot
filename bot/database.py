@@ -1,7 +1,7 @@
 import datetime
 import aiosqlite
 
-from bot.config import DB_PATH
+from bot.config import ADMIN_IDS, DB_PATH, OWNER_ID
 
 
 async def init_db():
@@ -18,6 +18,12 @@ async def init_db():
                 lang TEXT,
                 is_admin_mode INTEGER DEFAULT 0,
                 created_at TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bot_admins (
+                telegram_id INTEGER PRIMARY KEY,
+                created_at TEXT NOT NULL
             )
         """)
         await db.execute("""
@@ -186,6 +192,40 @@ async def set_admin_mode(telegram_id: int, enabled: bool):
             (1 if enabled else 0, telegram_id),
         )
         await db.commit()
+
+
+async def is_admin_user(telegram_id: int) -> bool:
+    if telegram_id == OWNER_ID or telegram_id in ADMIN_IDS:
+        return True
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT 1 FROM bot_admins WHERE telegram_id = ?", (telegram_id,))
+        return await cur.fetchone() is not None
+
+
+async def list_admin_ids() -> list[int]:
+    admin_ids = list(dict.fromkeys(ADMIN_IDS + ([OWNER_ID] if OWNER_ID else [])))
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT telegram_id FROM bot_admins ORDER BY telegram_id")
+        admin_ids.extend(row[0] for row in await cur.fetchall() if row[0] not in admin_ids)
+    return admin_ids
+
+
+async def add_admin(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO bot_admins (telegram_id, created_at) VALUES (?, ?)",
+            (telegram_id, datetime.datetime.now(datetime.timezone.utc).isoformat()),
+        )
+        await db.commit()
+
+
+async def remove_admin(telegram_id: int) -> bool:
+    if telegram_id == OWNER_ID or telegram_id in ADMIN_IDS:
+        return False
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("DELETE FROM bot_admins WHERE telegram_id = ?", (telegram_id,))
+        await db.commit()
+        return cur.rowcount > 0
 
 
 async def list_all_users() -> list[dict]:

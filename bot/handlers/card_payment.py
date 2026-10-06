@@ -10,7 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.states import CardPayment
 from bot.keyboards import main_menu_kb, card_timeout_kb, card_cancel_kb
 from bot.config import (
-    ADMIN_IDS, CARD_NUMBERS, CARD_OWNER_NAME, OWNER_ID, PAYMENT_GROUP_ID,
+    CARD_NUMBERS, CARD_OWNER_NAME, PAYMENT_GROUP_ID,
     CARD_PAYMENT_TIMEOUT_SECONDS,
 )
 from bot.services import ai_verify
@@ -19,6 +19,7 @@ from bot.services.pricing import format_som
 from bot.database import (
     create_card_payment, attach_receipt, set_ai_verdict, set_card_payment_status,
     get_card_payment, set_card_payment_group_message, update_user_phone, get_user,
+    list_admin_ids,
 )
 
 router = Router()
@@ -178,7 +179,7 @@ async def process_receipt(message: Message, state: FSMContext, bot: Bot):
         delivered_to.append((PAYMENT_GROUP_ID, sent.message_id))
     except Exception:
         logger.exception("Karta chekini to'lov guruhiga yuborib bo'lmadi (chat_id=%s)", PAYMENT_GROUP_ID)
-        for admin_id in dict.fromkeys(ADMIN_IDS + [OWNER_ID]):
+        for admin_id in await list_admin_ids():
             if not admin_id:
                 continue
             try:

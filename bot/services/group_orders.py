@@ -1,3 +1,5 @@
+import datetime
+
 from aiogram import Bot
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -6,6 +8,12 @@ from bot.config import ORDERS_GROUP_ID
 PENDING_MARK = "⏳ Jarayonda..."
 ACCEPTED_MARK = "✅ Qabul qilindi."
 CANCELLED_MARK = "❌ Bekor qilindi."
+# Uzbekistan uses UTC+05:00 year-round.
+TASHKENT_TIMEZONE = datetime.timezone(datetime.timedelta(hours=5))
+
+
+def tashkent_timestamp() -> str:
+    return datetime.datetime.now(TASHKENT_TIMEZONE).strftime("%d.%m.%Y %H:%M")
 
 
 def confirm1_kb():
