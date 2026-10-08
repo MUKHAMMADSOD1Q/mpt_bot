@@ -22,7 +22,9 @@ def _balance_actions_kb():
 
 @router.message(F.text == "💳 Balans va obuna")
 async def balance_menu(message: Message):
-    user = await get_or_create_user(message.from_user.id, message.from_user.username)
+    user = await get_or_create_user(
+        message.from_user.id, message.from_user.username, message.from_user.full_name,
+    )
     text = f"💰 Sizning balansingiz: <b>{user['mpt_balance']:.1f} MPT</b>\n"
     if user.get("subscription_type") and user.get("subscription_expiry"):
         text += f"📅 Faol obuna: {user['subscription_type']} (tugash sanasi: {user['subscription_expiry'][:10]})\n"

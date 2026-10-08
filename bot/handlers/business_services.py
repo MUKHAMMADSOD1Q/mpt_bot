@@ -29,7 +29,7 @@ async def _user_header(from_user) -> list[str]:
     phone = (user.get("phone") if user else None) or "O'tkazib yuborgan"
     username = from_user.username or "-"
     return [
-        f"👤 Ism: {from_user.full_name}",
+        f"👤 Telegramdagi ism: {from_user.full_name}",
         f"🔗 Username: @{username}",
         f"📞 Telefon raqam: {phone}",
     ]

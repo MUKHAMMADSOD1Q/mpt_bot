@@ -1,3 +1,5 @@
+import html
+
 from aiogram import Router, F
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
@@ -11,7 +13,7 @@ from bot.services.validators import is_valid_topic, is_valid_pages, is_valid_ful
 from bot.services.pricing import calculate_price, format_som
 from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import MIN_PAGES, MAX_PAGES, TARIFFS
-from bot.database import get_user
+from bot.database import get_user, update_user_telegram_profile
 from bot.keyboards import tariff_kb
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -280,6 +282,7 @@ async def build_summary(message: Message, state: FSMContext, tariff_key: str, fr
 
     telegram_id = from_user.id
     user = await get_user(telegram_id)
+    await update_user_telegram_profile(telegram_id, from_user.username, from_user.full_name)
     phone = (user.get("phone") if user else None) or "O'tkazib yuborgan"
     username = from_user.username or "-"
     institution = data.get("institution") or "O'tkazib yuborgan"
@@ -287,6 +290,7 @@ async def build_summary(message: Message, state: FSMContext, tariff_key: str, fr
 
     group_lines = [
         f"👤 Ism: {data['full_name']}",
+        f"👤 Telegramdagi ism: {html.escape(from_user.full_name)}",
         f"🔗 Username: @{username}",
         f"📞 Telefon raqam: {phone}",
         f"🏫 Ta'lim muassasasi: {institution}",

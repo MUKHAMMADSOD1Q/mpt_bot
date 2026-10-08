@@ -12,9 +12,10 @@ from bot.services.payment_common import ask_payment_method
 from bot.database import (
     create_order, set_order_group_message, set_order_status,
     deduct_mpt_balance, create_service_order, set_service_order_group_message,
-    get_user, set_order_paid_via,
+    get_user, set_order_paid_via, update_user_telegram_profile,
 )
 from bot.services.payment_common import subscription_covers
+from bot.services.group_orders import append_order_history
 
 router = Router()
 
@@ -36,7 +37,9 @@ async def step_one_confirmed(callback: CallbackQuery, state: FSMContext, bot: Bo
 @router.callback_query(OrderConfirm.confirm2, F.data == "flow_confirm")
 async def step_two_confirmed(callback: CallbackQuery, state: FSMContext, bot: Bot):
     data = await state.get_data()
-    await mark_group_message(bot, data["group_message_id"], data["group_full_text"], ACCEPTED_MARK)
+    data["group_full_text"] = await mark_group_message(
+        bot, data["group_message_id"], data["group_full_text"], ACCEPTED_MARK,
+    )
     await callback.answer()
 
     if data["flow_kind"] == "presentation":
@@ -57,6 +60,9 @@ async def flow_cancelled(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 async def _finalize_presentation(callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict):
     telegram_id = data["telegram_id"]
+    await update_user_telegram_profile(
+        telegram_id, callback.from_user.username, callback.from_user.full_name,
+    )
     order_id = await create_order({
         "telegram_id": telegram_id,
         "topic": data["topic"],
@@ -65,11 +71,15 @@ async def _finalize_presentation(callback: CallbackQuery, state: FSMContext, bot
         "price_som": data["price_som"],
         "price_mpt": data["price_mpt"],
         "full_name": data["full_name"],
+        "telegram_name": callback.from_user.full_name,
         "institution": data.get("institution"),
         "direction": data.get("direction"),
         "language": data.get("language"),
     })
     await set_order_group_message(order_id, data["group_message_id"])
+    data["group_full_text"] = await append_order_history(
+        bot, data["group_message_id"], data["group_full_text"], telegram_id,
+    )
 
     user = await get_user(telegram_id)
     mpt_needed = data["price_mpt"]
@@ -103,10 +113,17 @@ async def _finalize_presentation(callback: CallbackQuery, state: FSMContext, bot
 
 async def _finalize_service(callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict):
     telegram_id = data["telegram_id"]
+    await update_user_telegram_profile(
+        telegram_id, callback.from_user.username, callback.from_user.full_name,
+    )
     service_order_id = await create_service_order(
-        telegram_id, data["service_type"], data["topic"], data.get("summary_text", ""), data.get("price_som") or 0,
+        telegram_id, data["service_type"], data["topic"], data.get("summary_text", ""),
+        data.get("price_som") or 0, callback.from_user.full_name,
     )
     await set_service_order_group_message(service_order_id, data["group_message_id"])
+    data["group_full_text"] = await append_order_history(
+        bot, data["group_message_id"], data["group_full_text"], telegram_id,
+    )
     price_som = data.get("price_som")
 
     await state.clear()

@@ -16,7 +16,9 @@ def _menu_for(user: dict, user_id: int):
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    user = await get_or_create_user(message.from_user.id, message.from_user.username)
+    user = await get_or_create_user(
+        message.from_user.id, message.from_user.username, message.from_user.full_name,
+    )
     text = (
         f"Assalomu alaykum, {message.from_user.full_name}! 👋\n\n"
         "Men — talabalar va ish egalari uchun taqdimot, referat, kurs ishi, "
@@ -28,7 +30,9 @@ async def cmd_start(message: Message):
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message):
-    user = await get_or_create_user(message.from_user.id, message.from_user.username)
+    user = await get_or_create_user(
+        message.from_user.id, message.from_user.username, message.from_user.full_name,
+    )
     await message.answer("Bosh menyu:", reply_markup=_menu_for(user, message.from_user.id))
 
 

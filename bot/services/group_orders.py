@@ -1,6 +1,8 @@
 import datetime
+import logging
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramAPIError
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import ORDERS_GROUP_ID
@@ -10,6 +12,7 @@ ACCEPTED_MARK = "✅ Qabul qilindi."
 CANCELLED_MARK = "❌ Bekor qilindi."
 # Uzbekistan uses UTC+05:00 year-round.
 TASHKENT_TIMEZONE = datetime.timezone(datetime.timedelta(hours=5))
+logger = logging.getLogger(__name__)
 
 
 def tashkent_timestamp() -> str:
@@ -48,6 +51,55 @@ async def mark_group_message(bot: Bot, message_id: int, previous_text: str, new_
     except Exception:
         pass
     return new_text
+
+
+def format_order_date(value: str | None) -> str:
+    if not value:
+        return "sana noma'lum"
+    try:
+        parsed = datetime.datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(TASHKENT_TIMEZONE).strftime("%d.%m.%Y %H:%M")
+
+
+async def append_order_history(bot: Bot, message_id: int, previous_text: str, telegram_id: int) -> str:
+    from bot.database import get_user_order_history
+
+    history = await get_user_order_history(telegram_id)
+    if not history:
+        raise RuntimeError(f"Buyurtma tarixi topilmadi: telegram_id={telegram_id}")
+
+    prior_orders = history[:-1]
+    details = [f"🔢 Foydalanuvchining {len(history)}-buyurtmasi"]
+    if prior_orders:
+        details.append("📚 Oldingi buyurtmalari:")
+        details.extend(
+            f"• {item['order_type']} — {format_order_date(item['order_date'])}"
+            for item in prior_orders
+        )
+    else:
+        details.append("📚 Oldingi buyurtmalari: yo'q (birinchi buyurtma)")
+
+    updated_text = previous_text.replace(
+        f"\n\n{ACCEPTED_MARK}",
+        "\n" + "\n".join(details) + f"\n\n{ACCEPTED_MARK}",
+    )
+    try:
+        await bot.edit_message_text(
+            chat_id=ORDERS_GROUP_ID,
+            message_id=message_id,
+            text=updated_text,
+        )
+    except TelegramAPIError:
+        logger.exception(
+            "Buyurtma tarixini guruh xabariga qo'shib bo'lmadi: message_id=%s telegram_id=%s",
+            message_id,
+            telegram_id,
+        )
+    return updated_text
 
 
 async def attach_keyboard(bot: Bot, message_id: int, kb):

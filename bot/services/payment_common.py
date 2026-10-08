@@ -93,6 +93,7 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
             price_per_page = order["price_som"] / order["pages"] if order["pages"] else 0
             await _post_to_payment_group(bot, (
                 f"👤 Ism: {order['full_name']}\n"
+                f"👤 Telegramdagi ism: {order.get('telegram_name') or (user.get('telegram_name') if user else '-')}\n"
                 f"🔗 Username: @{username}\n"
                 f"📞 Telefon raqam: {phone}\n"
                 f"📄 Prezentatsiya turi: {TARIFFS.get(order['tariff'], {}).get('title', order['tariff'])}\n"
@@ -117,7 +118,8 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
         )
         if service:
             await _post_to_payment_group(bot, (
-                f"👤 Ism: @{username}\n"
+                f"👤 Telegramdagi ism: {service.get('telegram_name') or (user.get('telegram_name') if user else '-')}\n"
+                f"🔗 Username: @{username}\n"
                 f"📞 Telefon raqam: {phone}\n"
                 f"📄 Xizmat: {service['service_type']}\n"
                 f"📝 Mavzu: {service['topic']}\n"

@@ -9,6 +9,7 @@ Bu loyiha sizning `PreuzMPT.docx` va `prezintatsiya.uz` TZ fayllaringiz asosida 
 - Oylik/yillik obuna tariflari
 - Foydalanuvchi uchun MPT balans tizimi (SQLite bazasida)
 - Admin uchun buyruqlar: balans qo'shish, obuna faollashtirish, buyurtmalarni ko'rish/bajarish/rad etish
+- Admin paneldan foydalanuvchilarning Telegram ismi, aloqa/balans/obuna ma'lumotlari va buyurtmalar tarixini Excel (`.xlsx`) ko'rinishida olish
 - "Boshqa xizmatlar" (Logo, QR, Taklifnoma va h.k.) uchun to'g'ridan-to'g'ri adminga yo'naltirish
 - Kelajakda kengaytirish uchun shablon-asosida PowerPoint generatsiya moduli (`bot/services/pptx_generator.py`)
 

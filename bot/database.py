@@ -11,6 +11,7 @@ async def init_db():
                 telegram_id INTEGER PRIMARY KEY,
                 username TEXT,
                 full_name TEXT,
+                telegram_name TEXT,
                 mpt_balance REAL DEFAULT 0,
                 subscription_type TEXT,
                 subscription_expiry TEXT,
@@ -53,6 +54,7 @@ async def init_db():
                 price_som REAL,
                 price_mpt REAL,
                 full_name TEXT,
+                telegram_name TEXT,
                 institution TEXT,
                 direction TEXT,
                 language TEXT,
@@ -68,6 +70,7 @@ async def init_db():
                 service_type TEXT,
                 topic TEXT,
                 summary_text TEXT,
+                telegram_name TEXT,
                 price_som REAL,
                 status TEXT DEFAULT 'kutilmoqda',
                 group_message_id INTEGER,
@@ -108,8 +111,11 @@ async def init_db():
             ("users", "phone", "TEXT"),
             ("users", "is_admin_mode", "INTEGER DEFAULT 0"),
             ("users", "lang", "TEXT"),
+            ("users", "telegram_name", "TEXT"),
             ("orders", "paid_via", "TEXT"),
             ("orders", "group_message_id", "INTEGER"),
+            ("orders", "telegram_name", "TEXT"),
+            ("service_orders", "telegram_name", "TEXT"),
             ("click_payments", "group_message_id", "INTEGER"),
             ("card_payments", "group_message_id", "INTEGER"),
         ]
@@ -123,21 +129,45 @@ async def init_db():
 
 # ---------------- USERS ----------------
 
-async def get_or_create_user(telegram_id: int, username: str | None) -> dict:
+async def get_or_create_user(
+    telegram_id: int, username: str | None, telegram_name: str | None = None,
+) -> dict:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
         row = await cur.fetchone()
         if row:
+            await db.execute(
+                "UPDATE users SET username = ?, telegram_name = COALESCE(?, telegram_name) "
+                "WHERE telegram_id = ?",
+                (username, telegram_name, telegram_id),
+            )
+            await db.commit()
+            cur = await db.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
+            row = await cur.fetchone()
             return dict(row)
         await db.execute(
-            "INSERT INTO users (telegram_id, username, mpt_balance, created_at) VALUES (?, ?, 0, ?)",
-            (telegram_id, username, datetime.datetime.utcnow().isoformat()),
+            "INSERT INTO users (telegram_id, username, telegram_name, mpt_balance, created_at) "
+            "VALUES (?, ?, ?, 0, ?)",
+            (telegram_id, username, telegram_name, datetime.datetime.utcnow().isoformat()),
         )
         await db.commit()
         cur = await db.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
         row = await cur.fetchone()
         return dict(row)
+
+
+async def update_user_telegram_profile(telegram_id: int, username: str | None, telegram_name: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO users (telegram_id, username, telegram_name, mpt_balance, created_at)
+               VALUES (?, ?, ?, 0, ?)
+               ON CONFLICT(telegram_id) DO UPDATE SET
+                   username = excluded.username,
+                   telegram_name = excluded.telegram_name""",
+            (telegram_id, username, telegram_name, datetime.datetime.utcnow().isoformat()),
+        )
+        await db.commit()
 
 
 async def get_user(telegram_id: int) -> dict | None:
@@ -236,6 +266,53 @@ async def list_all_users() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+async def get_user_order_history(telegram_id: int) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """SELECT created_at AS order_date, 'Taqdimot' AS order_type
+                 FROM orders WHERE telegram_id = ?
+               UNION ALL
+               SELECT created_at AS order_date, service_type AS order_type
+                 FROM service_orders WHERE telegram_id = ?
+               UNION ALL
+               SELECT order_date, order_type
+                 FROM legacy_orders WHERE telegram_id = ?""",
+            (telegram_id, telegram_id, telegram_id),
+        )
+        rows = [dict(row) for row in await cur.fetchall()]
+    return sorted(rows, key=lambda row: row["order_date"] or "")
+
+
+async def list_all_users_with_order_history() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM users ORDER BY created_at")
+        users = [dict(row) for row in await cur.fetchall()]
+        cur = await db.execute(
+            """SELECT telegram_id, created_at AS order_date, 'Taqdimot' AS order_type
+                 FROM orders
+               UNION ALL
+               SELECT telegram_id, created_at AS order_date, service_type AS order_type
+                 FROM service_orders
+               UNION ALL
+               SELECT telegram_id, order_date, order_type
+                 FROM legacy_orders"""
+        )
+        orders_by_user: dict[int, list[dict]] = {}
+        for row in await cur.fetchall():
+            if row["telegram_id"] is not None:
+                orders_by_user.setdefault(row["telegram_id"], []).append({
+                    "order_date": row["order_date"],
+                    "order_type": row["order_type"],
+                })
+
+    for user in users:
+        history = orders_by_user.get(user["telegram_id"], [])
+        user["order_history"] = sorted(history, key=lambda row: row["order_date"] or "")
+    return users
+
+
 # ---------------- PRESENTATION ORDERS ----------------
 
 async def create_order(data: dict) -> int:
@@ -243,11 +320,11 @@ async def create_order(data: dict) -> int:
         cur = await db.execute(
             """INSERT INTO orders
                (telegram_id, topic, pages, tariff, price_som, price_mpt,
-                full_name, institution, direction, language, status, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'kutilmoqda', ?)""",
+                full_name, telegram_name, institution, direction, language, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'kutilmoqda', ?)""",
             (
                 data["telegram_id"], data["topic"], data["pages"], data["tariff"],
-                data["price_som"], data["price_mpt"], data["full_name"],
+                data["price_som"], data["price_mpt"], data["full_name"], data.get("telegram_name"),
                 data.get("institution"), data.get("direction"), data.get("language"),
                 datetime.datetime.utcnow().isoformat(),
             ),
@@ -286,12 +363,23 @@ async def list_pending_orders() -> list[dict]:
 
 # ---------------- SERVICE ORDERS (mustaqil ish, taklifnoma, logo, va h.k.) ----------------
 
-async def create_service_order(telegram_id: int, service_type: str, topic: str, summary_text: str, price_som: float) -> int:
+async def create_service_order(
+    telegram_id: int,
+    service_type: str,
+    topic: str,
+    summary_text: str,
+    price_som: float,
+    telegram_name: str | None = None,
+) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
-            """INSERT INTO service_orders (telegram_id, service_type, topic, summary_text, price_som, status, created_at)
-               VALUES (?, ?, ?, ?, ?, 'kutilmoqda', ?)""",
-            (telegram_id, service_type, topic, summary_text, price_som, datetime.datetime.utcnow().isoformat()),
+            """INSERT INTO service_orders
+               (telegram_id, service_type, topic, summary_text, telegram_name, price_som, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'kutilmoqda', ?)""",
+            (
+                telegram_id, service_type, topic, summary_text, telegram_name,
+                price_som, datetime.datetime.utcnow().isoformat(),
+            ),
         )
         await db.commit()
         return cur.lastrowid

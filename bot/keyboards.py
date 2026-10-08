@@ -7,6 +7,7 @@ from bot.config import TARIFFS, SUBSCRIPTIONS, INDEPENDENT_WORK_TYPES, WORK_LANG
 def admin_menu_kb(super_admin: bool = False) -> ReplyKeyboardMarkup:
     kb = [
         [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="🧾 Kutayotgan buyurtmalar")],
+        [KeyboardButton(text="👥 Foydalanuvchilar ma'lumoti")],
         [KeyboardButton(text="👤 Foydalanuvchiga xabar"), KeyboardButton(text="📢 Barchaga xabar")],
         [KeyboardButton(text="🛍 Soff.uz'ga yuklash")],
     ]

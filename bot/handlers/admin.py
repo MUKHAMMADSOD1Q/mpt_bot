@@ -1,13 +1,15 @@
 import asyncio
 import datetime
 import html
+from io import BytesIO
 import os
 import tempfile
 
+from openpyxl import Workbook
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message, CallbackQuery, FSInputFile, BufferedInputFile
 
 from bot.config import DB_PATH, PAYMENT_GROUP_ID, SUBSCRIPTIONS, OWNER_ID, SOFF_SELLER_PANEL_URL, TARIFFS
 from bot.states import AdminBroadcast, AdminSetPrice
@@ -19,7 +21,7 @@ from bot.database import (
     add_mpt_balance, get_user, set_subscription, set_admin_mode, list_all_users,
     get_total_paid_revenue, get_or_create_user, list_open_orders, list_open_service_orders,
     get_service_order, set_service_order_price, is_admin_user, list_admin_ids,
-    add_admin, remove_admin,
+    add_admin, remove_admin, list_all_users_with_order_history,
 )
 
 router = Router()
@@ -36,7 +38,9 @@ async def toggle_admin_mode(message: Message):
     """Adminlar uchun admin rejimini almashtiradi."""
     if not await is_admin(message.from_user.id):
         return
-    user = await get_or_create_user(message.from_user.id, message.from_user.username)
+    user = await get_or_create_user(
+        message.from_user.id, message.from_user.username, message.from_user.full_name,
+    )
     new_mode = not bool(user.get("is_admin_mode"))
     await set_admin_mode(message.from_user.id, new_mode)
     if new_mode:
@@ -227,6 +231,69 @@ async def admin_stats(message: Message):
     await message.answer(text, parse_mode="HTML")
 
 
+@router.message(F.text == "👥 Foydalanuvchilar ma'lumoti")
+async def admin_users_export(message: Message):
+    if not await is_admin(message.from_user.id):
+        return
+
+    users = await list_all_users_with_order_history()
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Foydalanuvchilar"
+    worksheet.append([
+        "Telegram ID", "Telegram ismi", "Username", "Telefon", "Til",
+        "MPT balans", "Obuna", "Obuna tugash sanasi", "Ro'yxatdan o'tgan",
+        "Buyurtmalar soni", "Buyurtmalar tarixi",
+    ])
+
+    for user in users:
+        history = user["order_history"]
+        history_text = "; ".join(
+            f"{item['order_type']}: {item['order_date'] or '-'}" for item in history
+        )
+        worksheet.append([
+            user["telegram_id"],
+            _excel_safe_text(user.get("telegram_name")),
+            _excel_safe_text(f"@{user['username']}" if user.get("username") else ""),
+            _excel_safe_text(user.get("phone")),
+            _excel_safe_text(user.get("lang")),
+            user.get("mpt_balance") or 0,
+            _excel_safe_text(user.get("subscription_type")),
+            _excel_safe_text(user.get("subscription_expiry")),
+            _excel_safe_text(user.get("created_at")),
+            len(history),
+            _excel_safe_text(history_text),
+        ])
+
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+    for column, width in {
+        "A": 16, "B": 28, "C": 22, "D": 20, "E": 14, "F": 14,
+        "G": 20, "H": 24, "I": 26, "J": 18, "K": 70,
+    }.items():
+        worksheet.column_dimensions[column].width = width
+
+    output = BytesIO()
+    workbook.save(output)
+    file = BufferedInputFile(
+        output.getvalue(),
+        filename=f"foydalanuvchilar_{datetime.datetime.now():%Y%m%d_%H%M}.xlsx",
+    )
+    await message.answer_document(
+        file,
+        caption=f"👥 Jami foydalanuvchilar: {len(users)}",
+    )
+
+
+def _excel_safe_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    if text.startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
 def _sub_line(user: dict | None) -> str:
     if user and user.get("subscription_type") and user.get("subscription_expiry"):
         return f"{user['subscription_type']} ({user['subscription_expiry'][:10]} gacha)"
@@ -251,6 +318,7 @@ async def admin_pending(message: Message):
         balance = user["mpt_balance"] if user else 0
         tariff_title = TARIFFS.get(o["tariff"], {}).get("title", o["tariff"])
         full_name = o.get("full_name") or "yo'q"
+        telegram_name = o.get("telegram_name") or (user.get("telegram_name") if user else None) or "yo'q"
         institution = o.get("institution") or "O'tkazib yuborgan"
         direction = o.get("direction") or "O'tkazib yuborgan"
         language = o.get("language") or "yo'q"
@@ -265,6 +333,7 @@ async def admin_pending(message: Message):
         chunks.append(
             f"🎓 Taqdimot №{o['id']}\n"
             f"USER_ID: {o['telegram_id']}\n📞 Raqam: {phone}\n🔗 Nickname: {nick}\n"
+            f"👤 Telegramdagi ism: {telegram_name}\n"
             f"📝 Mavzu: {o['topic']}\n📑 Sahifa: {o['pages']}\n📄 Ta'rif: {tariff_title}\n"
             f"👤 Ism: {full_name}\n"
             f"🏫 Ta'lim muassasasi: {institution}\n"
