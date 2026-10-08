@@ -5,6 +5,8 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 
 from bot.config import FILES_GROUP_ID
+from bot.i18n import tr
+from bot.services.user_locale import get_user_locale
 from bot.database import (
     get_order, get_service_order, set_order_status, set_service_order_status,
     list_pending_files, is_admin_user,
@@ -30,7 +32,7 @@ async def _send_record_file(message: Message, bot: Bot, kind: str, record_id: in
         return
 
     target_id = record["telegram_id"]
-    caption = "✅ Sizning buyurtmangiz tayyor bo'ldi!"
+    caption = tr(await get_user_locale(target_id), "file_delivered")
     try:
         if message.document:
             await bot.send_document(target_id, message.document.file_id, caption=caption)

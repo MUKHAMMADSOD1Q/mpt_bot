@@ -6,6 +6,8 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import ORDERS_GROUP_ID
+from bot.i18n import tr
+from bot.services.user_locale import get_user_locale
 
 PENDING_MARK = "⏳ Jarayonda..."
 ACCEPTED_MARK = "✅ Qabul qilindi."
@@ -19,18 +21,18 @@ def tashkent_timestamp() -> str:
     return datetime.datetime.now(TASHKENT_TIMEZONE).strftime("%d.%m.%Y %H:%M")
 
 
-def confirm1_kb():
+def confirm1_kb(language: str = "uz"):
     b = InlineKeyboardBuilder()
-    b.button(text="✅ Tasdiqlayman", callback_data="flow_confirm")
-    b.button(text="❌ Bekor qilish", callback_data="flow_cancel")
+    b.button(text=tr(language, "confirm_yes"), callback_data="flow_confirm")
+    b.button(text=tr(language, "cancel_payment"), callback_data="flow_cancel")
     b.adjust(2)
     return b.as_markup()
 
 
-def confirm2_kb():
+def confirm2_kb(language: str = "uz"):
     b = InlineKeyboardBuilder()
-    b.button(text="✅ Ha, ishonchim komil", callback_data="flow_confirm")
-    b.button(text="❌ Yo'q, bekor qilaman", callback_data="flow_cancel")
+    b.button(text=tr(language, "confirm_sure"), callback_data="flow_confirm")
+    b.button(text=tr(language, "confirm_cancel"), callback_data="flow_cancel")
     b.adjust(2)
     return b.as_markup()
 
@@ -117,6 +119,8 @@ async def begin_confirmation(message, state, **data):
     bo'lsa service_type, summary_text."""
     from bot.states import OrderConfirm
     preview_text = data.pop("preview_text", "Ma'lumotlaringizni tasdiqlaysizmi?")
+    telegram_id = data["telegram_id"]
     await state.update_data(**data)
     await state.set_state(OrderConfirm.confirm1)
-    await message.answer(preview_text, parse_mode="HTML", reply_markup=confirm1_kb())
+    language = await get_user_locale(telegram_id)
+    await message.answer(preview_text, parse_mode="HTML", reply_markup=confirm1_kb(language))

@@ -9,62 +9,69 @@ from bot.services.pricing import format_som
 from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import MIN_PAGES, MAX_PAGES, INDEPENDENT_WORK_TYPES, LANGUAGE_SURCHARGE_PER_PAGE
 from bot.database import get_user
-from bot.i18n import menu_labels
+from bot.i18n import menu_labels, tr
+from bot.services.user_locale import get_user_locale
 
 router = Router()
 
 
 @router.message(F.text.in_(menu_labels("independent")))
 async def start_independent_work(message: Message, state: FSMContext):
+    language = await get_user_locale(message.from_user.id)
     await state.set_state(IndependentWork.waiting_type)
-    await message.answer("Ish turini tanlang:", reply_markup=independent_work_type_kb())
+    await message.answer(tr(language, "ind_type"), reply_markup=independent_work_type_kb(language))
 
 
 @router.callback_query(IndependentWork.waiting_type, F.data.startswith("iw_type:"))
 async def choose_type(callback: CallbackQuery, state: FSMContext):
+    language = await get_user_locale(callback.from_user.id)
     work_type = callback.data.split(":", 1)[1]
     await state.update_data(work_type=work_type)
     await state.set_state(IndependentWork.waiting_topic)
-    await callback.message.answer("Mavzu nomini kiriting:")
+    await callback.message.answer(tr(language, "topic_enter"))
     await callback.answer()
 
 
 @router.message(IndependentWork.waiting_topic)
 async def process_topic(message: Message, state: FSMContext):
+    language = await get_user_locale(message.from_user.id)
     if not is_valid_topic(message.text):
-        await message.answer("Iltimos, mavzu nomini to'g'ri kiriting.")
+        await message.answer(tr(language, "topic_invalid_short"))
         return
     await state.update_data(topic=message.text.strip())
     await state.set_state(IndependentWork.waiting_pages)
-    await message.answer("Nechta sahifali bo'lishi kerak?")
+    await message.answer(tr(language, "pages_enter"))
 
 
 @router.message(IndependentWork.waiting_pages)
 async def process_pages(message: Message, state: FSMContext):
+    language = await get_user_locale(message.from_user.id)
     ok, value = is_valid_pages(message.text, MIN_PAGES, MAX_PAGES)
     if not ok:
-        await message.answer(f"Iltimos, faqat raqam kiriting ({MIN_PAGES}-{MAX_PAGES} oralig'ida).")
+        await message.answer(tr(language, "pages_invalid_short", minimum=MIN_PAGES, maximum=MAX_PAGES))
         return
     await state.update_data(pages=value)
     await state.set_state(IndependentWork.waiting_images)
-    await message.answer("Ish ichida rasm bo'lsinmi?", reply_markup=yes_no_kb("iw_img"))
+    await message.answer(tr(language, "images_question"), reply_markup=yes_no_kb("iw_img", language))
 
 
 @router.callback_query(IndependentWork.waiting_images, F.data.startswith("iw_img:"))
 async def process_images(callback: CallbackQuery, state: FSMContext):
+    language = await get_user_locale(callback.from_user.id)
     has_images = callback.data.endswith(":ha")
     await state.update_data(has_images=has_images)
     await state.set_state(IndependentWork.waiting_graphics)
-    await callback.message.answer("Grafika va jadvallar kerakmi?", reply_markup=yes_no_kb("iw_graf"))
+    await callback.message.answer(tr(language, "graphics_question"), reply_markup=yes_no_kb("iw_graf", language))
     await callback.answer()
 
 
 @router.callback_query(IndependentWork.waiting_graphics, F.data.startswith("iw_graf:"))
 async def process_graphics(callback: CallbackQuery, state: FSMContext):
+    language_ui = await get_user_locale(callback.from_user.id)
     has_graphics = callback.data.endswith(":ha")
     await state.update_data(has_graphics=has_graphics)
     await state.set_state(IndependentWork.waiting_language)
-    await callback.message.answer("Ish qaysi tilda bajarilsin?", reply_markup=language_choice_kb("iw_lang"))
+    await callback.message.answer(tr(language_ui, "language_question"), reply_markup=language_choice_kb("iw_lang", language_ui))
     await callback.answer()
 
 
@@ -73,6 +80,7 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
     language = callback.data.split(":", 1)[1]
     data = await state.get_data()
     telegram_id = callback.from_user.id
+    language_ui = await get_user_locale(telegram_id)
     username = callback.from_user.username or "-"
     user = await get_user(telegram_id)
     phone = (user.get("phone") if user else None) or "O'tkazib yuborgan"
@@ -82,13 +90,13 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
 
     if work_info["price_per_page"] is None:
         price_som = None
-        price_text = "admin bilan kelishiladi"
+        price_text = tr(language_ui, "price_by_admin")
     else:
         per_page = work_info["price_per_page"]
         if language != "O'zbek":
             per_page += LANGUAGE_SURCHARGE_PER_PAGE
         price_som = per_page * pages
-        price_text = f"{format_som(price_som)} so'm ({format_som(per_page)} so'm/sahifa)"
+        price_text = tr(language_ui, "ind_price", total=format_som(price_som), unit=format_som(per_page))
 
     images_label = "Ha" if data["has_images"] else "Yo'q"
     graphics_label = "Ha" if data["has_graphics"] else "Yo'q"
@@ -108,9 +116,10 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
         f"🕒 Sana/vaqt: {tashkent_timestamp()}",
     ]
 
-    preview = (
-        f"<b>{work_info['title']}</b> — “{data['topic']}”, {pages} sahifa.\n"
-        f"Til: {language}. Narx: <b>{price_text}</b>.\n\nTasdiqlaysizmi?"
+    localized_type = tr(language_ui, f"ind_type_{data['work_type']}")
+    preview = tr(
+        language_ui, "independent_preview", title=localized_type, topic=data["topic"],
+        pages=pages, language=language, price=price_text,
     )
 
     await begin_confirmation(

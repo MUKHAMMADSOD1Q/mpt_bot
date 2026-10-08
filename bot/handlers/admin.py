@@ -17,6 +17,8 @@ from bot.keyboards import admin_menu_kb
 from bot.services.pricing import format_som
 from bot.services.legacy_import import import_legacy_db, is_sqlite_file
 from bot.services.payment_common import subscription_covers, send_payment_request_dm
+from bot.i18n import tr
+from bot.services.user_locale import get_user_locale
 from bot.database import (
     add_mpt_balance, get_user, set_subscription, set_admin_mode, list_all_users,
     get_total_paid_revenue, get_or_create_user, list_open_orders, list_open_service_orders,
@@ -498,9 +500,10 @@ async def svc_setprice_amount(message: Message, state: FSMContext, bot: Bot):
     await set_service_order_price(service["id"], amount)
     await state.clear()
     try:
+        language = await get_user_locale(service["telegram_id"])
         await send_payment_request_dm(
             bot, state.storage, service["telegram_id"], "service", amount, str(service["id"]),
-            intro=f"💰 “{service['topic']}” buyurtmangiz uchun narx belgilandi: {format_som(amount)} so'm.",
+            intro=tr(language, "service_priced", topic=service["topic"], amount=format_som(amount)),
         )
         await message.answer(f"✅ Narx {format_som(amount)} so'm belgilandi, foydalanuvchiga to'lov so'rovi yuborildi.")
     except Exception as e:

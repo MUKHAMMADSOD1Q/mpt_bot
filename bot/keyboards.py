@@ -28,6 +28,7 @@ def main_menu_kb(language: str = "uz") -> ReplyKeyboardMarkup:
         [KeyboardButton(text=tr(language, "menu_business"))],
         [KeyboardButton(text=tr(language, "menu_products"))],
         [KeyboardButton(text=tr(language, "menu_ai"))],
+        [KeyboardButton(text=tr(language, "menu_manual_presentation"))],
         [KeyboardButton(text=tr(language, "menu_games"))],
         [KeyboardButton(text=tr(language, "menu_balance"))],
         [KeyboardButton(text=tr(language, "menu_settings"))],
@@ -112,40 +113,40 @@ def games_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def presentation_entry_kb() -> InlineKeyboardMarkup:
+def presentation_entry_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 Buyurtma berish", callback_data="pres:order")
-    builder.button(text="🧮 PreCal — narxni hisoblash", callback_data="pres:precal")
+    builder.button(text=tr(language, "presentation_order"), callback_data="pres:order")
+    builder.button(text=tr(language, "precal_button"), callback_data="pres:precal")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def precal_tariff_kb() -> InlineKeyboardMarkup:
+def precal_tariff_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for key, t in TARIFFS.items():
-        label = "Bepul" if key == "bepul" else f"{t['title']} — {t['som']:,} so'm/sahifa".replace(",", ".")
+        label = tr(language, f"tariff_{key}") + ("" if key == "bepul" else f" — {t['som']:,} UZS/page".replace(",", "."))
         builder.button(text=label, callback_data=f"precal_t:{key}")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def precal_approve_kb() -> InlineKeyboardMarkup:
+def precal_approve_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Ma'qul, buyurtma beraman", callback_data="precal_ok")
-    builder.button(text="💸 Arzonroq ta'riflarni ko'rsat", callback_data="precal_cheaper")
+    builder.button(text=tr(language, "precal_ok"), callback_data="precal_ok")
+    builder.button(text=tr(language, "precal_cheaper"), callback_data="precal_cheaper")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def business_services_kb() -> InlineKeyboardMarkup:
+def business_services_kb(language: str = "uz") -> InlineKeyboardMarkup:
     items = [
-        ("💌 Taklifnoma", "biz:taklifnoma"),
-        ("🎨 UI dizayn", "biz:ui"),
-        ("🌐 Web-sayt", "biz:web"),
-        ("📄 Rezyume", "biz:rezyume"),
-        ("📺 YouTube banner", "biz:youtube"),
-        ("🖼 Logo", "biz:logo"),
-        ("🔗 QR-generator", "biz:qr"),
+        (tr(language, "biz_invitation"), "biz:taklifnoma"),
+        (tr(language, "biz_ui"), "biz:ui"),
+        (tr(language, "biz_website"), "biz:web"),
+        (tr(language, "biz_resume"), "biz:rezyume"),
+        (tr(language, "biz_youtube"), "biz:youtube"),
+        (tr(language, "biz_logo"), "biz:logo"),
+        (tr(language, "biz_qr"), "biz:qr"),
     ]
     builder = InlineKeyboardBuilder()
     for text, cb in items:
@@ -154,23 +155,23 @@ def business_services_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def independent_work_type_kb() -> InlineKeyboardMarkup:
+def independent_work_type_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for key, info in INDEPENDENT_WORK_TYPES.items():
-        builder.button(text=info["title"], callback_data=f"iw_type:{key}")
+        builder.button(text=tr(language, f"ind_type_{key}"), callback_data=f"iw_type:{key}")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def yes_no_kb(prefix: str) -> InlineKeyboardMarkup:
+def yes_no_kb(prefix: str, language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Ha", callback_data=f"{prefix}:ha")
-    builder.button(text="❌ Yo'q", callback_data=f"{prefix}:yoq")
+    builder.button(text=tr(language, "yes"), callback_data=f"{prefix}:ha")
+    builder.button(text=tr(language, "no"), callback_data=f"{prefix}:yoq")
     builder.adjust(2)
     return builder.as_markup()
 
 
-def language_choice_kb(prefix: str) -> InlineKeyboardMarkup:
+def language_choice_kb(prefix: str, _ui_language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for lang in WORK_LANGUAGES:
         builder.button(text=lang, callback_data=f"{prefix}:{lang}")
@@ -178,42 +179,42 @@ def language_choice_kb(prefix: str) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def ui_platform_kb() -> InlineKeyboardMarkup:
+def ui_platform_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for label, cb in [("📱 Mobil ilova", "ui_platform:mobil"), ("💻 Veb-sayt", "ui_platform:veb"),
-                       ("🤖 Telegram Web-App", "ui_platform:tgwebapp")]:
-        builder.button(text=label, callback_data=cb)
+    for key, cb in [("ui_mobile", "ui_platform:mobil"), ("ui_web", "ui_platform:veb"),
+                    ("ui_tgwebapp", "ui_platform:tgwebapp")]:
+        builder.button(text=tr(language, key), callback_data=cb)
     builder.adjust(1)
     return builder.as_markup()
 
 
-def business_size_kb() -> InlineKeyboardMarkup:
+def business_size_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for label, cb in [("🟢 Kichik", "biz_size:kichik"), ("🟡 O'rta", "biz_size:orta"), ("🔴 Katta", "biz_size:katta")]:
-        builder.button(text=label, callback_data=cb)
+    for key, cb in [("size_small", "biz_size:kichik"), ("size_medium", "biz_size:orta"), ("size_large", "biz_size:katta")]:
+        builder.button(text=tr(language, key), callback_data=cb)
     builder.adjust(3)
     return builder.as_markup()
 
 
-def website_style_kb() -> InlineKeyboardMarkup:
+def website_style_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    labels = {"minimalizm": "Minimalizm", "zamonaviy": "Zamonaviy", "hi-tech": "Hi-Tech", "3d": "3D", "boshqa": "Boshqa"}
+    labels = {"minimalizm": "style_minimal", "zamonaviy": "style_modern", "hi-tech": "style_hitech", "3d": "style_3d", "boshqa": "style_other"}
     for key in WEBSITE_STYLE_PRICES:
-        builder.button(text=labels.get(key, key), callback_data=f"web_style:{key}")
+        builder.button(text=tr(language, labels.get(key, key)), callback_data=f"web_style:{key}")
     builder.adjust(2)
     return builder.as_markup()
 
 
-def skip_or_upload_kb() -> InlineKeyboardMarkup:
+def skip_or_upload_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="⏭ Rasmsiz davom etish", callback_data="skip")
+    builder.button(text=tr(language, "skip_upload"), callback_data="skip")
     return builder.as_markup()
 
 
-def tariff_kb() -> InlineKeyboardMarkup:
+def tariff_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for key, t in TARIFFS.items():
-        label = "Bepul" if key == "bepul" else f"{t['title']} — {t['mpt']} MPT / {t['som']:,} so'm".replace(",", ".")
+        label = tr(language, f"tariff_{key}") + ("" if key == "bepul" else f" — {t['mpt']} MPT / {t['som']:,} UZS".replace(",", "."))
         builder.button(text=label, callback_data=f"tariff:{key}")
     builder.adjust(1)
     return builder.as_markup()
@@ -225,10 +226,10 @@ def free_tariff_kb(language: str = "uz") -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def subscription_kb() -> InlineKeyboardMarkup:
+def subscription_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for key, s in SUBSCRIPTIONS.items():
-        builder.button(text=f"{s['title']} — {s['som']:,} so'm".replace(",", "."), callback_data=f"sub:{key}")
+        builder.button(text=f"{tr(language, f'subscription_{key}')} — {s['som']:,} UZS".replace(",", "."), callback_data=f"sub:{key}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -247,36 +248,36 @@ def mpt_topup_amounts_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def click_check_kb(merchant_trans_id: str, pay_url: str) -> InlineKeyboardMarkup:
+def click_check_kb(merchant_trans_id: str, pay_url: str, language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔗 To'lash (Click)", url=pay_url)
-    builder.button(text="🔄 To'lovni tekshirish", callback_data=f"clickcheck:{merchant_trans_id}")
+    builder.button(text=tr(language, "click_pay"), url=pay_url)
+    builder.button(text=tr(language, "check_payment"), callback_data=f"clickcheck:{merchant_trans_id}")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def click_app_choice_kb() -> InlineKeyboardMarkup:
+def click_app_choice_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Ha, bor", callback_data="clickapp:yes")
-    builder.button(text="❌ Yo'q, link yuboring", callback_data="clickapp:no")
+    builder.button(text=tr(language, "click_app_yes"), callback_data="clickapp:yes")
+    builder.button(text=tr(language, "click_app_no"), callback_data="clickapp:no")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def click_phone_kb() -> ReplyKeyboardMarkup:
+def click_phone_kb(language: str = "uz") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📱 Telefon raqamimni ulashish", request_contact=True)]],
+        keyboard=[[KeyboardButton(text=tr(language, "share_phone"), request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
 
 
-def click_wait_kb(merchant_trans_id: str, pay_url: str | None = None) -> InlineKeyboardMarkup:
+def click_wait_kb(merchant_trans_id: str, pay_url: str | None = None, language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if pay_url:
-        builder.button(text="🔗 Click orqali to'lash", url=pay_url)
-    builder.button(text="🔄 To'lovni tekshirish", callback_data=f"clickcheck:{merchant_trans_id}")
-    builder.button(text="🎮 Kutish vaqtida o'yin", callback_data=f"clickgame:start:{merchant_trans_id}")
+        builder.button(text=tr(language, "pay_click_link"), url=pay_url)
+    builder.button(text=tr(language, "check_payment"), callback_data=f"clickcheck:{merchant_trans_id}")
+    builder.button(text=tr(language, "payment_game"), callback_data=f"clickgame:start:{merchant_trans_id}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -289,25 +290,25 @@ def click_game_answers_kb(options: list[int]) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def click_game_done_kb(merchant_trans_id: str) -> InlineKeyboardMarkup:
+def click_game_done_kb(merchant_trans_id: str, language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 To'lovni tekshirish", callback_data=f"clickcheck:{merchant_trans_id}")
-    builder.button(text="👨‍💼 Admin bilan aloqa", url="https://t.me/preuzadmin")
+    builder.button(text=tr(language, "check_payment"), callback_data=f"clickcheck:{merchant_trans_id}")
+    builder.button(text=tr(language, "contact_admin"), url="https://t.me/preuzadmin")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def card_timeout_kb(payment_id: int) -> InlineKeyboardMarkup:
+def card_timeout_kb(payment_id: int, language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="➕ Yana 5 daqiqa", callback_data=f"cardextend:{payment_id}")
-    builder.button(text="❌ Bekor qilish", callback_data=f"cardgiveup:{payment_id}")
+    builder.button(text=tr(language, "add_five_minutes"), callback_data=f"cardextend:{payment_id}")
+    builder.button(text=tr(language, "cancel_payment"), callback_data=f"cardgiveup:{payment_id}")
     builder.adjust(2)
     return builder.as_markup()
 
 
-def card_cancel_kb(payment_id: int) -> InlineKeyboardMarkup:
+def card_cancel_kb(payment_id: int, language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="❌ Bekor qilish", callback_data=f"cardgiveup:{payment_id}")
+    builder.button(text=tr(language, "cancel_payment"), callback_data=f"cardgiveup:{payment_id}")
     return builder.as_markup()
 
 

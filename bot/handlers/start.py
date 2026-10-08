@@ -14,6 +14,7 @@ from bot.keyboards import (
 from bot.states import OrderPresentation
 from bot.texts import ABOUT_US_HTML, build_guide, chunk_text
 from bot.i18n import menu_labels, normalize_language, tr
+from bot.services.user_locale import get_user_locale
 
 router = Router()
 
@@ -43,6 +44,7 @@ async def cmd_menu(message: Message):
 
 
 @router.message(F.text.in_(menu_labels("ai")))
+@router.message(F.text.in_(menu_labels("manual_presentation")))
 async def ai_menu(message: Message, state: FSMContext):
     from bot.database import get_user
 
@@ -95,7 +97,7 @@ async def settings_action(callback: CallbackQuery):
     elif action == "guide":
         await callback.message.answer(tr(language, "guide_text"))
     else:
-        await callback.answer("Unknown settings action.", show_alert=True)
+        await callback.answer(tr(language, "unknown_settings_action"), show_alert=True)
         return
     await callback.answer()
 
@@ -104,7 +106,7 @@ async def settings_action(callback: CallbackQuery):
 async def select_bot_language(callback: CallbackQuery):
     language = callback.data.split(":", 1)[1]
     if language not in {"uz", "ru", "en", "tg", "kk", "ky", "tk"}:
-        await callback.answer("Unknown language.", show_alert=True)
+        await callback.answer(tr(language, "unknown_language"), show_alert=True)
         return
     await get_or_create_user(
         callback.from_user.id,
@@ -134,15 +136,21 @@ async def show_admin_contacts(callback: CallbackQuery):
 
 @router.message(F.text.in_(menu_labels("games")))
 async def games_menu(message: Message):
-    await message.answer("Ko'ngil ochish uchun havolalar:", reply_markup=games_kb())
+    language = await get_user_locale(message.from_user.id)
+    await message.answer(tr(language, "games_intro"), reply_markup=games_kb())
 
 
 @router.message(F.text == "🤝 Biz haqimizda")
 async def about_us(message: Message):
-    await message.answer(ABOUT_US_HTML, parse_mode="HTML", disable_web_page_preview=True)
+    language = await get_user_locale(message.from_user.id)
+    await message.answer(
+        ABOUT_US_HTML if language == "uz" else tr(language, "settings_about_text"),
+        parse_mode="HTML", disable_web_page_preview=True,
+    )
 
 
 @router.message(F.text == "📖 Foydalanish qo'llanmasi")
 async def guide(message: Message):
-    for part in chunk_text(build_guide()):
+    language = await get_user_locale(message.from_user.id)
+    for part in chunk_text(build_guide() if language == "uz" else tr(language, "guide_text")):
         await message.answer(part, parse_mode="HTML", disable_web_page_preview=True)

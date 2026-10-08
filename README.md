@@ -77,9 +77,13 @@ Quyida **nolldan production'gacha** bo'lgan barcha qadamlar yozilgan.
    dan `GEMINI_API_KEY` oling va uni lokal `.env` yoki Railway **Variables** bo'limiga kiriting.
    Kalitni chatga yoki GitHub'ga yubormang.
 
-Til sozlamasi hozir asosiy menyu, sozlamalar sahifalari va AI taqdimot buyurtma oqimini
-mahalliylashtiradi. Eski to'lov, tadbirkorlik va boshqa xizmat oqimlarining barcha xabarlari
-hali yetti tilga to'liq tarjima qilinmagan.
+Til sozlamasi foydalanuvchiga ko'rinadigan bot interfeysi va asosiy suhbat oqimlarini
+yetti tilda — o'zbek, rus, ingliz, tojik, qozoq, qirg'iz va turkman tillarida —
+mahalliylashtiradi. Bunga taqdimot va PreCal, mustaqil ish, biznes xizmatlari, tayyor
+mahsulotlarni ko'rish, balans/obuna, Click/karta to'lovi, tasdiqlash va fayl yetkazish
+xabarlari hamda tugmalar kiradi. Admin paneli va buyurtma/to'lov/fayl guruhlariga
+yuboriladigan ichki xabarlar o'zbekcha qoladi; foydalanuvchi kiritgan ma'lumotlar
+asl holida ko'rsatiladi.
 
 Qo'lda AI oqimida bot tashqi AI xizmatiga o'zi ulanmaydi: promptni foydalanuvchi tanlagan
 xizmatga foydalanuvchining o'zi yuboradi. Javob matni va tanlangan rasmlardan tayyorlangan

@@ -20,6 +20,8 @@ from bot.keyboards import (
 from bot.services import click_api
 from bot.services.payment_common import complete_payment, is_payment_admin
 from bot.states import ClickPayment
+from bot.i18n import tr
+from bot.services.user_locale import get_user_locale
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -84,14 +86,14 @@ async def _notify_click_payment_group(merchant_trans_id: str, channel: str, bot:
 
 async def start_click_payment(message: Message, state: FSMContext, purpose: str, amount_som: float, payload: str):
     telegram_id = message.chat.id
+    language = await get_user_locale(telegram_id)
     merchant_trans_id = f"{purpose}-{telegram_id}-{int(time.time())}"
     await create_click_payment(telegram_id, merchant_trans_id, amount_som, purpose, payload)
     await state.update_data(click_merchant_trans_id=merchant_trans_id)
     await state.set_state(ClickPayment.waiting_app_choice)
     await message.answer(
-        "Qurilmangizda ClickSuperApp ilovasi bormi? Bor bo'lsa, to'lov so'rovini ilovaga yuboraman; "
-        "bo'lmasa, to'lov havolasini beraman.",
-        reply_markup=click_app_choice_kb(),
+        tr(language, "click_intro"),
+        reply_markup=click_app_choice_kb(language),
     )
 
 
@@ -99,7 +101,8 @@ async def _send_checkout(message: Message, state: FSMContext, merchant_trans_id:
     payment = await get_click_payment(merchant_trans_id)
     pay_url = click_api.build_checkout_url(payment["amount_som"], merchant_trans_id)
     await _notify_click_payment_group(merchant_trans_id, "havola", message.bot)
-    await message.answer(intro, reply_markup=click_wait_kb(merchant_trans_id, pay_url))
+    language = await get_user_locale(message.chat.id)
+    await message.answer(intro, reply_markup=click_wait_kb(merchant_trans_id, pay_url, language))
     await state.clear()
 
 
@@ -111,59 +114,59 @@ async def _send_invoice(message: Message, state: FSMContext, merchant_trans_id: 
         response = {}
 
     if response.get("error_code") == 0:
+        language = await get_user_locale(payment["telegram_id"])
         await update_user_phone(payment["telegram_id"], phone)
         await _notify_click_payment_group(merchant_trans_id, "ClickSuperApp invoice", message.bot)
         await message.answer(
-            "✅ ClickSuperApp ilovasiga to'lov so'rovi yuborildi. Ilovada to'lovni tasdiqlang, "
-            "so'ng quyidagi tugma orqali holatini tekshiring. Kutish paytida xohlasangiz o'yin o'ynashingiz mumkin.",
-            reply_markup=click_wait_kb(merchant_trans_id),
+            tr(language, "click_invoice_sent"),
+            reply_markup=click_wait_kb(merchant_trans_id, language=language),
         )
         await state.clear()
         return
 
-    await message.answer(
-        "Click ilovasiga so'rov yuborilmadi. To'lovni havola orqali davom ettirishingiz mumkin."
-    )
-    await _send_checkout(message, state, merchant_trans_id, "To'lov havolasi:")
+    language = await get_user_locale(payment["telegram_id"])
+    await message.answer(tr(language, "click_invoice_failed"))
+    await _send_checkout(message, state, merchant_trans_id, tr(language, "payment_link"))
 
 
 @router.callback_query(ClickPayment.waiting_app_choice, F.data == "clickapp:yes")
 async def click_app_available(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
+    language = await get_user_locale(callback.from_user.id)
     await callback.answer()
     await state.set_state(ClickPayment.waiting_phone)
     await callback.message.answer(
-        "Click ilovangizga ulangan telefon raqamini yuboring yoki pastdagi tugma orqali o'z raqamingizni ulashing.",
-        reply_markup=click_phone_kb(),
+        tr(language, "click_phone_prompt"),
+        reply_markup=click_phone_kb(language),
     )
 
 
 @router.callback_query(ClickPayment.waiting_app_choice, F.data == "clickapp:no")
 async def click_app_unavailable(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
+    language = await get_user_locale(callback.from_user.id)
     await callback.answer()
     await _send_checkout(
         callback.message, state, data["click_merchant_trans_id"],
-        "Quyidagi havolani ochib Click orqali to'lang. To'lovdan keyin holatini tekshirishingiz mumkin; "
-        "kutish vaqtida o'yin o'ynash ixtiyoriy.",
+        tr(language, "click_checkout_intro"),
     )
 
 
 @router.message(ClickPayment.waiting_phone)
 async def click_phone_received(message: Message, state: FSMContext):
+    language = await get_user_locale(message.from_user.id)
     if message.contact:
         if message.contact.user_id != message.from_user.id:
-            await message.answer("Iltimos, faqat o'zingizning telefon raqamingizni ulashing.")
+            await message.answer(tr(language, "share_own_phone"))
             return
         raw_phone = message.contact.phone_number
     else:
         raw_phone = message.text or ""
     phone = _normalize_phone(raw_phone)
     if not phone:
-        await message.answer("Raqam formati noto'g'ri. 901234567 yoki 998901234567 ko'rinishida yuboring.")
+        await message.answer(tr(language, "phone_invalid"))
         return
     data = await state.get_data()
-    await message.answer("Raqam qabul qilindi.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(tr(language, "phone_received"), reply_markup=ReplyKeyboardRemove())
     await _send_invoice(message, state, data["click_merchant_trans_id"], phone)
 
 
@@ -196,9 +199,11 @@ def _new_math_question(progress: int) -> tuple[str, int, list[int]]:
 async def _show_math_question(message: Message, state: FSMContext, progress: int):
     question, answer, options = _new_math_question(progress)
     await state.update_data(game_answer=answer)
-    text = f"🧮 Savol {progress + 1}/10\n\n{question}"
+    language = await get_user_locale(message.chat.id)
+    text = tr(language, "math_question", number=progress + 1, question=question)
     markup = click_game_answers_kb(options)
-    if message.text and message.text.startswith("🧮 Savol "):
+    question_prefix = tr(language, "math_question", number="", question="").splitlines()[0].split("/", 1)[0]
+    if message.text and message.text.startswith(question_prefix):
         await message.edit_text(text, reply_markup=markup)
     else:
         await message.answer(text, reply_markup=markup)
@@ -206,13 +211,14 @@ async def _show_math_question(message: Message, state: FSMContext, progress: int
 
 @router.callback_query(F.data.startswith("clickgame:start:"))
 async def click_game_start(callback: CallbackQuery, state: FSMContext):
+    language = await get_user_locale(callback.from_user.id)
     merchant_trans_id = callback.data.rsplit(":", 1)[1]
     payment = await get_click_payment(merchant_trans_id)
     if not payment or payment["telegram_id"] != callback.from_user.id:
-        await callback.answer("To'lov topilmadi.", show_alert=True)
+        await callback.answer(tr(language, "payment_not_found"), show_alert=True)
         return
     if payment["status"] == "tolandi":
-        await callback.answer("To'lov allaqachon tasdiqlangan.", show_alert=True)
+        await callback.answer(tr(language, "payment_already_approved"), show_alert=True)
         return
     await state.update_data(game_merchant_trans_id=merchant_trans_id, game_progress=0)
     await state.set_state(ClickPayment.playing_game)
@@ -222,26 +228,27 @@ async def click_game_start(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(ClickPayment.playing_game, F.data.startswith("clickgame:answer:"))
 async def click_game_answer(callback: CallbackQuery, state: FSMContext):
+    language = await get_user_locale(callback.from_user.id)
     data = await state.get_data()
     try:
         selected = int(callback.data.rsplit(":", 1)[1])
     except ValueError:
-        await callback.answer("Javob noto'g'ri.", show_alert=True)
+        await callback.answer(tr(language, "answer_invalid"), show_alert=True)
         return
     if selected != data.get("game_answer"):
-        await callback.answer("Noto'g'ri javob. Yangi savol berildi.")
+        await callback.answer(tr(language, "answer_wrong"))
         await _show_math_question(callback.message, state, data["game_progress"])
         return
 
     progress = data["game_progress"] + 1
-    await callback.answer("To'g'ri!" if progress < 10 else "Ajoyib, 10 ta savol yakunlandi!")
+    await callback.answer(tr(language, "answer_correct") if progress < 10 else tr(language, "game_complete"))
     if progress == 10:
         merchant_trans_id = data["game_merchant_trans_id"]
         await state.clear()
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(
-            "🎉 10 ta misolni to'g'ri yechdingiz! To'lov holatini tekshiring yoki admin bilan bog'laning.",
-            reply_markup=click_game_done_kb(merchant_trans_id),
+            tr(language, "game_done"),
+            reply_markup=click_game_done_kb(merchant_trans_id, language),
         )
         return
     await state.update_data(game_progress=progress)
@@ -250,24 +257,25 @@ async def click_game_answer(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("clickcheck:"))
 async def check_payment(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    language = await get_user_locale(callback.from_user.id)
     merchant_trans_id = callback.data.split(":", 1)[1]
     payment = await get_click_payment(merchant_trans_id)
     if not payment or payment["telegram_id"] != callback.from_user.id:
-        await callback.answer("To'lov topilmadi.", show_alert=True)
+        await callback.answer(tr(language, "payment_not_found"), show_alert=True)
         return
     if payment["status"] == "tolandi":
-        await callback.answer("Bu to'lov allaqachon tasdiqlangan ✅", show_alert=True)
+        await callback.answer(tr(language, "payment_already_approved"), show_alert=True)
         return
     if payment["status"] == "rad_etildi":
-        await callback.answer("Bu to'lov admin tomonidan rad etilgan.", show_alert=True)
+        await callback.answer(tr(language, "payment_rejected"), show_alert=True)
         return
 
     status = await click_api.check_payment_status_by_mti(merchant_trans_id)
     if not click_api.is_paid(status):
-        await callback.answer("Hali to'lov tasdiqlanmadi. Yakunlab, yana tekshiring.", show_alert=True)
+        await callback.answer(tr(language, "payment_pending"), show_alert=True)
         return
 
-    await callback.answer("Click to'lovi bajarilgan. Admin tasdig'i kutilmoqda.", show_alert=True)
+    await callback.answer(tr(language, "click_waiting_admin"), show_alert=True)
 
 
 @router.callback_query(F.data.startswith("clickapprove:"))

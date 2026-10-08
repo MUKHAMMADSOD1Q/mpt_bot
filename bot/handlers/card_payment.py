@@ -22,6 +22,8 @@ from bot.database import (
     list_admin_ids,
 )
 from bot.services.user_locale import localized_main_menu
+from bot.services.user_locale import get_user_locale
+from bot.i18n import tr
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -39,8 +41,8 @@ def _normalize_phone(raw: str) -> str | None:
     return None
 
 
-def _cards_text() -> str:
-    lines = [f"To'lovni <b>{CARD_OWNER_NAME}</b> nomiga quyidagi kartalardan biriga o'tkazing:\n"]
+def _cards_text(language: str) -> str:
+    lines = [tr(language, "card_transfer", name=CARD_OWNER_NAME) + "\n"]
     for bank, numbers in CARD_NUMBERS.items():
         for num in numbers:
             lines.append(f"• {bank}: <code>{num.replace(' ', '')}</code>")
@@ -56,16 +58,18 @@ def _admin_review_kb(payment_id: int):
 
 
 async def start_card_payment(message: Message, state: FSMContext, purpose: str, amount_som: float, payload: str):
+    language = await get_user_locale(message.chat.id)
     await state.set_state(CardPayment.waiting_phone)
     await state.update_data(purpose=purpose, amount_som=amount_som, payload=payload)
-    await message.answer("Aloqa uchun telefon raqamingizni kiriting (masalan: 998901234567):")
+    await message.answer(tr(language, "card_phone_prompt"))
 
 
 @router.message(CardPayment.waiting_phone)
 async def process_card_phone(message: Message, state: FSMContext):
+    language = await get_user_locale(message.from_user.id)
     phone = _normalize_phone(message.text or "")
     if not phone:
-        await message.answer("Telefon raqami noto'g'ri formatda. Masalan: 998901234567 shaklida yuboring.")
+        await message.answer(tr(language, "phone_invalid_card"))
         return
     telegram_id = message.chat.id
     await update_user_phone(telegram_id, phone)
@@ -78,13 +82,12 @@ async def process_card_phone(message: Message, state: FSMContext):
     await state.set_state(CardPayment.waiting_receipt)
 
     await message.answer(
-        _cards_text() + (
-            f"\n\n<b>To'lanadigan summa: {format_som(data['amount_som'])} so'm</b>\n\n"
-            "To'lovni amalga oshirgach, to'lov chekini (skrinshot yoki PDF) shu yerga yuboring 👇\n"
-            f"<i>Diqqat: to'lov uchun {CARD_PAYMENT_TIMEOUT_SECONDS // 60} daqiqa vaqtingiz bor.</i>"
+        _cards_text(language) + (
+            tr(language, "card_instructions", amount=format_som(data["amount_som"]),
+               minutes=CARD_PAYMENT_TIMEOUT_SECONDS // 60)
         ),
         parse_mode="HTML",
-        reply_markup=card_cancel_kb(payment_id),
+        reply_markup=card_cancel_kb(payment_id, language),
     )
 
     bot = message.bot
@@ -99,32 +102,35 @@ async def _timeout_watcher(payment_id: int, chat_id: int, bot: Bot):
         return
     payment = await get_card_payment(payment_id)
     if payment and payment["status"] == "chek_kutilmoqda":
+        language = await get_user_locale(chat_id)
         await bot.send_message(
             chat_id,
-            "⏰ 5 daqiqa o'tdi, hali to'lov cheki yuborilmadi. Davom etasizmi?",
-            reply_markup=card_timeout_kb(payment_id),
+            tr(language, "card_timeout"),
+            reply_markup=card_timeout_kb(payment_id, language),
         )
     _TIMEOUT_TASKS.pop(payment_id, None)
 
 
 @router.callback_query(F.data.startswith("cardextend:"))
 async def extend_timeout(callback: CallbackQuery):
+    language = await get_user_locale(callback.from_user.id)
     payment_id = int(callback.data.split(":", 1)[1])
     payment = await get_card_payment(payment_id)
     if not payment or payment["status"] != "chek_kutilmoqda":
-        await callback.answer("Bu to'lov endi faol emas.", show_alert=True)
+        await callback.answer(tr(language, "card_not_active"), show_alert=True)
         return
     task = asyncio.create_task(_timeout_watcher(payment_id, payment["telegram_id"], callback.bot))
     _TIMEOUT_TASKS[payment_id] = task
     await callback.message.answer(
-        "➕ Yana 5 daqiqa qo'shildi. Chekni shu vaqt ichida yuboring.",
-        reply_markup=card_cancel_kb(payment_id),
+        tr(language, "card_extended"),
+        reply_markup=card_cancel_kb(payment_id, language),
     )
     await callback.answer()
 
 
 @router.callback_query(F.data.startswith("cardgiveup:"))
 async def give_up_payment(callback: CallbackQuery, state: FSMContext):
+    language = await get_user_locale(callback.from_user.id)
     payment_id = int(callback.data.split(":", 1)[1])
     task = _TIMEOUT_TASKS.pop(payment_id, None)
     if task:
@@ -132,7 +138,7 @@ async def give_up_payment(callback: CallbackQuery, state: FSMContext):
     await set_card_payment_status(payment_id, "bekor_qilindi")
     await state.clear()
     await callback.message.answer(
-        "❌ To'lov bekor qilindi.",
+        tr(language, "order_cancelled"),
         reply_markup=await localized_main_menu(callback.from_user.id),
     )
     await callback.answer()
@@ -142,6 +148,7 @@ async def give_up_payment(callback: CallbackQuery, state: FSMContext):
 async def process_receipt(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     telegram_id = message.chat.id
+    language = await get_user_locale(telegram_id)
     payment_id = data["payment_id"]
 
     task = _TIMEOUT_TASKS.pop(payment_id, None)
@@ -157,7 +164,7 @@ async def process_receipt(message: Message, state: FSMContext, bot: Bot):
 
     await attach_receipt(payment_id, file_id, mime_type)
     await message.answer(
-        "✅ Chek qabul qilindi, adminlarga yuborilmoqda...",
+        tr(language, "receipt_received"),
         reply_markup=await localized_main_menu(telegram_id),
     )
     user = await get_user(telegram_id)
@@ -204,12 +211,12 @@ async def process_receipt(message: Message, state: FSMContext, bot: Bot):
 
     if delivered_to:
         await message.answer(
-            "✅ Chek adminlarga yuborildi, tekshiruv kutilmoqda.",
+            tr(language, "receipt_sent"),
             reply_markup=await localized_main_menu(telegram_id),
         )
     else:
         await message.answer(
-            "⚠️ Chek qabul qilindi, ammo adminlarga yetkazilmadi. Iltimos, admin bilan bog'laning.",
+            tr(language, "receipt_not_sent"),
             reply_markup=await localized_main_menu(telegram_id),
         )
 
@@ -244,7 +251,8 @@ async def process_receipt(message: Message, state: FSMContext, bot: Bot):
 
 @router.message(CardPayment.waiting_receipt)
 async def wrong_receipt_format(message: Message):
-    await message.answer("Iltimos, to'lov chekini rasm (screenshot) yoki PDF fayl sifatida yuboring.")
+    language = await get_user_locale(message.from_user.id)
+    await message.answer(tr(language, "receipt_format"))
 
 
 @router.callback_query(F.data.startswith("cardapprove:"))
@@ -277,7 +285,8 @@ async def admin_reject(callback: CallbackQuery, bot: Bot):
         return
     await set_card_payment_status(payment_id, "rad_etildi")
     try:
-        await bot.send_message(payment["telegram_id"], "❌ To'lov chekingiz tasdiqlanmadi. Admin bilan bog'laning.")
+        language = await get_user_locale(payment["telegram_id"])
+        await bot.send_message(payment["telegram_id"], tr(language, "receipt_rejected"))
     except Exception:
         logger.exception("Chek rad etilgani haqida userga xabar yuborilmadi (payment_id=%s)", payment_id)
     await callback.message.edit_reply_markup(reply_markup=None)

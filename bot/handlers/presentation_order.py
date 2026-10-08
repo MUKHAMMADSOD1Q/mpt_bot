@@ -34,13 +34,9 @@ async def presentation_entry(message: Message, state: FSMContext):
     language = await _ui_language(message.from_user.id)
     await state.clear()
     await message.answer(
-        "What would you like to do?\n\n"
-        "🧮 <b>PreCal</b> — calculate a presentation price without placing an order."
-        if language == "en" else
-        "Nima qilmoqchisiz?\n\n"
-        "🧮 <b>PreCal</b> — buyurtma bermasdan taqdimot narxini hisoblab ko'rish.",
+        tr(language, "presentation_entry_intro"),
         parse_mode="HTML",
-        reply_markup=presentation_entry_kb(),
+        reply_markup=presentation_entry_kb(language),
     )
 
 
@@ -50,10 +46,7 @@ async def start_order(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await state.set_state(OrderPresentation.waiting_topic)
     await callback.message.answer(
-        tr(language, "topic_prompt") + (
-            "\n\n<i>Please make the topic as clear and specific as possible.</i>"
-            if language == "en" else ""
-        ),
+        tr(language, "topic_prompt") + "\n\n<i>" + tr(language, "topic_note") + "</i>",
         parse_mode="HTML",
     )
     await callback.answer()
@@ -65,49 +58,50 @@ async def start_order(callback: CallbackQuery, state: FSMContext):
 async def precal_start(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await state.set_state(PreCal.waiting_tariff)
+    language = await _ui_language(callback.from_user.id)
     await callback.message.answer(
-        "🧮 <b>PreCal</b> — qaysi ta'rifda hisoblaymiz?\n\n"
-        "<i>Narxlar taqdimotning bir sahifasi uchun ko'rsatilgan.</i>",
+        tr(language, "precal_intro"),
         parse_mode="HTML",
-        reply_markup=precal_tariff_kb(),
+        reply_markup=precal_tariff_kb(language),
     )
     await callback.answer()
 
 
 @router.callback_query(PreCal.waiting_tariff, F.data.startswith("precal_t:"))
 async def precal_tariff(callback: CallbackQuery, state: FSMContext):
+    language = await _ui_language(callback.from_user.id)
     await state.update_data(tariff=callback.data.split(":", 1)[1])
     await state.set_state(PreCal.waiting_pages)
-    await callback.message.answer("Taqdimot nechta sahifali bo'lsin?")
+    await callback.message.answer(tr(language, "pages_enter"))
     await callback.answer()
 
 
 @router.message(PreCal.waiting_pages)
 async def precal_pages(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     ok, value = is_valid_pages(message.text or "", MIN_PAGES, MAX_PAGES)
     if not ok:
-        await message.answer(f"Iltimos, faqat raqam kiriting ({MIN_PAGES}-{MAX_PAGES} oralig'ida).")
+        await message.answer(tr(language, "pages_invalid_short", minimum=MIN_PAGES, maximum=MAX_PAGES))
         return
     await state.update_data(pages=value)
     await state.set_state(PreCal.waiting_language)
-    await message.answer("Taqdimot qaysi tilda bo'lsin?", reply_markup=language_choice_kb("precal_lang"))
+    await message.answer(tr(language, "output_language_prompt"), reply_markup=language_choice_kb("precal_lang"))
 
 
 async def _show_precal_result(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     data = await state.get_data()
     p = calculate_price(data["tariff"], data["pages"], data["language"])
     extra = ""
     if p["surcharge_per_page_som"]:
-        extra = f"\n🌐 Chet tili uchun +{format_som(p['surcharge_per_page_som'])} so'm/sahifa hisobga olingan."
+        extra = tr(language, "precal_surcharge", amount=format_som(p["surcharge_per_page_som"]))
     await state.set_state(PreCal.waiting_approval)
     await message.answer(
-        f"🧮 <b>Hisob-kitob</b>\n\n"
-        f"Ta'rif: <b>{p['tariff_title']}</b>\nSahifalar: {p['pages']}\nTil: {data['language']}\n"
-        f"1 sahifa: {format_som(p['price_per_page_som'])} so'm{extra}\n\n"
-        f"💰 Jami: <b>{format_som(p['price_som'])} so'm</b> ({p['price_mpt']:.1f} MPT)\n\n"
-        "Narx ma'qulmi?",
+        tr(language, "precal_result", tariff=tr(language, f"tariff_{data['tariff']}"), pages=p["pages"],
+           language=data["language"], per_page=format_som(p["price_per_page_som"]),
+           total=format_som(p["price_som"]), mpt=p["price_mpt"], extra=extra),
         parse_mode="HTML",
-        reply_markup=precal_approve_kb(),
+        reply_markup=precal_approve_kb(language),
     )
 
 
@@ -120,27 +114,30 @@ async def precal_language(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(PreCal.waiting_approval, F.data == "precal_ok")
 async def precal_approved(callback: CallbackQuery, state: FSMContext):
+    language = await _ui_language(callback.from_user.id)
     await state.update_data(precal=True)
     await state.set_state(OrderPresentation.waiting_topic)
-    await callback.message.answer("Ajoyib! Endi taqdimot mavzusini kiriting:")
+    await callback.message.answer(tr(language, "precal_next"))
     await callback.answer()
 
 
 @router.callback_query(PreCal.waiting_approval, F.data == "precal_cheaper")
 async def precal_cheaper(callback: CallbackQuery, state: FSMContext):
+    language = await _ui_language(callback.from_user.id)
     data = await state.get_data()
     current = TARIFFS[data["tariff"]]["som"]
     cheaper = [(k, t) for k, t in TARIFFS.items() if t["som"] < current]
     if not cheaper:
-        await callback.message.answer("Bu allaqachon eng arzon ta'rif 🙂 Xohlasangiz, sahifalar sonini kamaytirib ko'ring.")
+        await callback.message.answer(tr(language, "precal_already_cheapest"))
         await callback.answer()
         return
     builder = InlineKeyboardBuilder()
-    lines = ["💸 <b>Arzonroq ta'riflar</b> (sizning sahifa soni va tilingiz bo'yicha):\n"]
+    lines = [tr(language, "precal_cheaper_title") + "\n"]
     for key, t in reversed(cheaper):
         p = calculate_price(key, data["pages"], data["language"])
-        lines.append(f"• {t['title']} — {format_som(p['price_som'])} so'm")
-        builder.button(text=f"{t['title']} — {format_som(p['price_som'])} so'm", callback_data=f"precal_pick:{key}")
+        title = tr(language, f"tariff_{key}")
+        lines.append(f"• {title} — {format_som(p['price_som'])} UZS")
+        builder.button(text=f"{title} — {format_som(p['price_som'])} UZS", callback_data=f"precal_pick:{key}")
     builder.adjust(1)
     await callback.message.answer("\n".join(lines), parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
@@ -274,7 +271,7 @@ async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
     language = await _ui_language(message.from_user.id)
     await state.set_state(OrderPresentation.waiting_tariff)
     data = await state.get_data()
-    keyboard = free_tariff_kb(language) if data.get("ai_only_free") else tariff_kb()
+    keyboard = free_tariff_kb(language) if data.get("ai_only_free") else tariff_kb(language)
     text = (
         (tr(language, "ai_free_only") + "\n\n" if data.get("ai_only_free") else "")
         + tr(language, "tariff_prompt")
@@ -334,12 +331,11 @@ async def build_summary(message: Message, state: FSMContext, tariff_key: str, fr
         f"🕒 Sana/vaqt: {tashkent_timestamp()}",
     ]
 
-    preview = (
-        f"Siz, <b>{pricing['tariff_title']}</b> tarif rejasida, "
-        f"“{data['topic']}” mavzusida {data['pages']}ta sahifali ({language}) taqdimot tayyorlamoqchisiz.\n\n"
-        f"Buyurtmaning umumiy narxi — <b>{format_som(pricing['price_som'])} so'm</b> "
-        f"({pricing['price_mpt']:.1f} MPT).\n\nTasdiqlaysizmi?"
-    )
+    ui_language = await _ui_language(telegram_id)
+    preview = tr(ui_language, "presentation_preview",
+                  tariff=tr(ui_language, f"tariff_{tariff_key}"), topic=data["topic"],
+                  pages=data["pages"], language=language, total=format_som(pricing["price_som"]),
+                  mpt=pricing["price_mpt"])
     await begin_confirmation(
         message, state,
         flow_kind="presentation",

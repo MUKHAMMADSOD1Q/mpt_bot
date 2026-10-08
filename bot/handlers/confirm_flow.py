@@ -16,20 +16,23 @@ from bot.database import (
 from bot.services.user_locale import localized_main_menu
 from bot.services.payment_common import subscription_covers
 from bot.services.group_orders import append_order_history
+from bot.i18n import tr
+from bot.services.user_locale import get_user_locale
 
 router = Router()
 
 
 @router.callback_query(OrderConfirm.confirm1, F.data == "flow_confirm")
 async def step_one_confirmed(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    language = await get_user_locale(callback.from_user.id)
     data = await state.get_data()
     if not data.get("group_message_id"):
         msg_id, full_text = await post_pending_group_message(bot, data["group_lines"])
         await state.update_data(group_message_id=msg_id, group_full_text=full_text)
     await state.set_state(OrderConfirm.confirm2)
     await callback.message.answer(
-        "❗️Ishonchingiz komilmi? Tasdiqlagach buyurtmani bekor qilib bo'lmaydi.",
-        reply_markup=confirm2_kb(),
+        tr(language, "confirm_warning"),
+        reply_markup=confirm2_kb(language),
     )
     await callback.answer()
 
@@ -50,12 +53,13 @@ async def step_two_confirmed(callback: CallbackQuery, state: FSMContext, bot: Bo
 
 @router.callback_query(F.data == "flow_cancel")
 async def flow_cancelled(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    language = await get_user_locale(callback.from_user.id)
     data = await state.get_data()
     if data.get("group_message_id"):
         await mark_group_message(bot, data["group_message_id"], data["group_full_text"], CANCELLED_MARK)
     await state.clear()
     await callback.message.answer(
-        "Buyurtma bekor qilindi.",
+        tr(language, "order_cancelled"),
         reply_markup=await localized_main_menu(callback.from_user.id),
     )
     await callback.answer()
@@ -63,6 +67,7 @@ async def flow_cancelled(callback: CallbackQuery, state: FSMContext, bot: Bot):
 
 async def _finalize_presentation(callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict):
     telegram_id = data["telegram_id"]
+    language = await get_user_locale(telegram_id)
     await update_user_telegram_profile(
         telegram_id, callback.from_user.username, callback.from_user.full_name,
     )
@@ -98,24 +103,29 @@ async def _finalize_presentation(callback: CallbackQuery, state: FSMContext, bot
     await state.clear()
 
     if paid_via:
+        display_paid_via = tr(language, {
+            "Bepul tarif": "payment_via_free",
+            "Oylik obuna doirasida": "payment_via_subscription",
+            "MPT balansidan": "payment_via_mpt",
+        }.get(paid_via, "payment_via_other"))
         await set_order_status(order_id, "tolandi")
         await set_order_paid_via(order_id, paid_via)
         await callback.message.answer(
-            f"✅ To'lov qabul qilindi ({paid_via}). №{order_id} buyurtmangiz ishlanmoqda — "
-            "ish ko'lamiga qarab 1-5 soat ichida tayyor bo'lib, adminlar tomonidan yuboriladi.",
+            tr(language, "payment_accepted", via=display_paid_via, id=order_id),
             reply_markup=await localized_main_menu(telegram_id),
         )
         from bot.services.payment_common import notify_files_group_ready
         await notify_files_group_ready(bot, kind="order", record_id=order_id)
     else:
         await callback.message.answer(
-            "Balansingizda yetarli MPT yo'q. To'lovni Click yoki karta orqali amalga oshiring:"
+            tr(language, "insufficient_balance")
         )
         await ask_payment_method(callback.message, state, purpose="order", amount_som=data["price_som"], payload=str(order_id))
 
 
 async def _finalize_service(callback: CallbackQuery, state: FSMContext, bot: Bot, data: dict):
     telegram_id = data["telegram_id"]
+    language = await get_user_locale(telegram_id)
     await update_user_telegram_profile(
         telegram_id, callback.from_user.username, callback.from_user.full_name,
     )
@@ -133,14 +143,13 @@ async def _finalize_service(callback: CallbackQuery, state: FSMContext, bot: Bot
 
     if price_som:
         await callback.message.answer(
-            "To'lovni Click yoki karta orqali amalga oshirishingiz mumkin:",
+            tr(language, "service_payment_prompt"),
             reply_markup=await localized_main_menu(telegram_id),
         )
         await ask_payment_method(callback.message, state, purpose="service", amount_som=price_som, payload=str(service_order_id))
     else:
         await attach_keyboard(bot, data["group_message_id"], setprice_kb(service_order_id))
         await callback.message.answer(
-            "✅ Buyurtmangiz qabul qilindi! Narxi ishning hajmiga qarab belgilanadi — "
-            "tez orada admin siz bilan bog'lanib, aniq narxni va to'lov usulini kelishadi.",
+            tr(language, "service_accepted"),
             reply_markup=await localized_main_menu(telegram_id),
         )

@@ -12,6 +12,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.config import SUBSCRIPTIONS, PAYMENT_GROUP_ID, FILES_GROUP_ID, TARIFFS, GEMINI_API_KEY
 from bot.keyboards import admin_contact_prompt_kb
 from bot.services.pricing import format_som
+from bot.i18n import tr
+from bot.services.user_locale import get_user_locale
 from bot.database import (
     add_mpt_balance, set_subscription, set_order_status, get_order, get_user,
     get_service_order, set_service_order_status, set_order_paid_via, is_admin_user,
@@ -50,6 +52,7 @@ async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
     slides = await generate_presentation_slides(
         order["topic"], order["pages"], order.get("language") or "O'zbek",
     )
+    language = await get_user_locale(order["telegram_id"])
     output_path = ""
     try:
         with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as output:
@@ -68,7 +71,7 @@ async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
         await bot.send_document(
             order["telegram_id"],
             FSInputFile(output_path),
-            caption=f"✅ “{order['topic']}” taqdimotingiz tayyor. Buyurtma №{order['id']}.",
+            caption=tr(language, "generated_presentation_ready", topic=order["topic"], id=order["id"]),
         )
     finally:
         if output_path and os.path.exists(output_path):
@@ -98,10 +101,10 @@ async def is_payment_admin(user_id: int, bot: Bot) -> bool:
         return False
 
 
-def payment_method_kb():
+def payment_method_kb(language: str = "uz"):
     builder = InlineKeyboardBuilder()
-    builder.button(text="💳 Click orqali", callback_data="paymethod:click")
-    builder.button(text="🏦 Kartaga to'lov", callback_data="paymethod:card")
+    builder.button(text=tr(language, "pay_click"), callback_data="paymethod:click")
+    builder.button(text=tr(language, "pay_card"), callback_data="paymethod:card")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -110,11 +113,11 @@ async def ask_payment_method(message: Message, state: FSMContext, purpose: str, 
     """Har qanday to'lov (MPT, obuna, buyurtma, xizmat) shu funksiya orqali boshlanadi —
     foydalanuvchi Click yoki Karta orasida tanlaydi."""
     await state.update_data(pm_purpose=purpose, pm_amount_som=amount_som, pm_payload=payload)
+    language = await get_user_locale(message.chat.id)
     await message.answer(
-        f"To'lanadigan summa: <b>{format_som(amount_som)} so'm</b>.\n\n"
-        "To'lov usulini tanlang:",
+        tr(language, "payment_total", amount=format_som(amount_som)),
         parse_mode="HTML",
-        reply_markup=payment_method_kb(),
+        reply_markup=payment_method_kb(language),
     )
 
 
@@ -124,13 +127,14 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
     obuna faollashtirish yoki buyurtma/xizmatni 'to'landi' deb belgilash.
     paid_via: "Click", "Karta" yoki "MPT balansi" — hisobot uchun."""
     user = await get_user(telegram_id)
+    language = await get_user_locale(telegram_id)
     username = user["username"] if user else "-"
     phone = (user.get("phone") if user else None) or "-"
 
     if purpose == "mpt":
         mpt_amount = float(payload)
         await add_mpt_balance(telegram_id, mpt_amount)
-        await bot.send_message(telegram_id, f"💰 Balansingizga {mpt_amount:.1f} MPT qo'shildi!")
+        await bot.send_message(telegram_id, tr(language, "mpt_added", amount=mpt_amount))
         await _post_to_payment_group(bot, (
             f"💰 MPT to'ldirish ({paid_via})\n"
             f"👤 @{username} (id: {telegram_id})\n"
@@ -142,7 +146,7 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
         sub = SUBSCRIPTIONS[payload]
         expiry = (datetime.datetime.utcnow() + datetime.timedelta(days=sub["days"])).isoformat()
         await set_subscription(telegram_id, payload, expiry)
-        await bot.send_message(telegram_id, f"📅 “{sub['title']}” obunangiz faollashtirildi!")
+        await bot.send_message(telegram_id, tr(language, "subscription_activated", name=tr(language, f"subscription_{payload}")))
         await _post_to_payment_group(bot, (
             f"📅 Obuna sotib olindi ({paid_via})\n"
             f"👤 @{username} (id: {telegram_id})\n"
@@ -157,8 +161,7 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
         order = await get_order(order_id)
         await bot.send_message(
             telegram_id,
-            f"✅ To'lovingiz qabul qilindi! Ish ko'lamiga qarab 1-5 soat ichida tayyor bo'lib, "
-            f"adminlar tomonidan sizga yuboriladi. (Buyurtma №{order_id})",
+            tr(language, "order_payment_delivered", id=order_id),
         )
         if order:
             price_per_page = order["price_som"] / order["pages"] if order["pages"] else 0
@@ -184,8 +187,7 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
         service = await get_service_order(service_order_id)
         await bot.send_message(
             telegram_id,
-            f"✅ To'lovingiz qabul qilindi! Ish ko'lamiga qarab 1-5 soat ichida tayyor bo'lib, "
-            f"adminlar tomonidan sizga yuboriladi.",
+            tr(language, "service_payment_delivered"),
         )
         if service:
             await _post_to_payment_group(bot, (
@@ -241,12 +243,11 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
         )
         if failure_reason and order["tariff"] == "bepul":
             try:
+                language = await get_user_locale(order["telegram_id"])
                 await bot.send_message(
                     order["telegram_id"],
-                    "⚠️ Bepul AI taqdimotni hozir avtomatik tayyorlay olmadi.\n"
-                    f"{failure_reason.strip()}\n"
-                    "Buyurtmangiz adminga qo'lda tayyorlash uchun yuborildi.",
-                    reply_markup=admin_contact_prompt_kb(),
+                    tr(language, "ai_manual_notice"),
+                    reply_markup=admin_contact_prompt_kb(language),
                 )
             except Exception:
                 logger.exception(
