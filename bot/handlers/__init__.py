@@ -8,7 +8,9 @@ from . import (
 
 def get_root_router() -> Router:
     root = Router()
-    # Tartib muhim: guruhga xos va admin handlerlar oldin, umumiy menyu handlerlari oxirida
+    # Menyu va /start handlerlari FSM bosqichlaridan oldin tekshirilsin,
+    # shunda foydalanuvchi faol buyurtmadan ham menyu orqali chiqib keta oladi.
+    root.include_router(start.router)
     root.include_router(navigation.router)
     root.include_router(admin.router)
     root.include_router(files_group.router)
@@ -21,5 +23,4 @@ def get_root_router() -> Router:
     root.include_router(business_services.router)
     root.include_router(soff_browse.router)
     root.include_router(balance.router)
-    root.include_router(start.router)
     return root
