@@ -1,12 +1,15 @@
 import datetime
 import logging
+import os
+import tempfile
+import asyncio
 
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import SUBSCRIPTIONS, PAYMENT_GROUP_ID, FILES_GROUP_ID, TARIFFS
+from bot.config import SUBSCRIPTIONS, PAYMENT_GROUP_ID, FILES_GROUP_ID, TARIFFS, GEMINI_API_KEY
 from bot.services.pricing import format_som
 from bot.database import (
     add_mpt_balance, set_subscription, set_order_status, get_order, get_user,
@@ -14,6 +17,54 @@ from bot.database import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
+    from bot.services.ai_content import generate_presentation_slides
+    from bot.services.pptx_generator import build_presentation, pick_random_template
+
+    template_path = pick_random_template(order["tariff"]) or pick_random_template("bepul")
+    if not template_path:
+        raise RuntimeError("Taqdimot uchun PowerPoint shablon topilmadi.")
+
+    slides = await generate_presentation_slides(
+        order["topic"], order["pages"], order.get("language") or "O'zbek",
+    )
+    output_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as output:
+            output_path = output.name
+        await asyncio.to_thread(
+            build_presentation,
+            template_path=template_path,
+            output_path=output_path,
+            topic=order["topic"],
+            full_name=order.get("full_name") or "",
+            institution=order.get("institution") or "",
+            direction=order.get("direction") or "",
+            total_pages=order["pages"],
+            slides_content=slides,
+        )
+        await bot.send_document(
+            order["telegram_id"],
+            FSInputFile(output_path),
+            caption=f"✅ “{order['topic']}” taqdimotingiz tayyor. Buyurtma №{order['id']}.",
+        )
+    finally:
+        if output_path and os.path.exists(output_path):
+            os.remove(output_path)
+
+    await set_order_status(order["id"], "bajarildi")
+    try:
+        await bot.send_message(
+            FILES_GROUP_ID,
+            f"✅ AI taqdimoti foydalanuvchiga yuborildi.\n"
+            f"REF:order-{order['id']}\n"
+            f"👤 USER_ID: {order['telegram_id']}",
+        )
+    except Exception:
+        logger.exception("AI bilan tayyorlangan taqdimot haqida guruhga xabar yuborilmadi")
+    return True
 
 
 async def is_payment_admin(user_id: int, bot: Bot) -> bool:
@@ -132,13 +183,32 @@ async def complete_payment(telegram_id: int, purpose: str, payload: str, bot: Bo
 
 
 async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
-    """To'lov tasdiqlangach, "Userlar fayllari" guruhiga tayyorlanishi kerak
-    bo'lgan ish haqida xabar joylaydi. Admin tayyor faylni shu xabarga REPLY
-    qilib yuborsa, bot avtomatik userga yo'naltiradi."""
+    """To'lov tasdiqlangach, taqdimotni AI bilan yuboradi yoki qo'lda tayyorlashga qoldiradi."""
+    failure_reason = ""
     if kind == "order":
         order = await get_order(record_id)
         if not order:
+            logger.error("Taqdimot buyurtmasi topilmadi: order_id=%s", record_id)
             return
+        if order["status"] != "tolandi":
+            logger.info(
+                "Taqdimot qayta generatsiya qilinmadi: order_id=%s status=%s",
+                record_id,
+                order["status"],
+            )
+            return
+        if GEMINI_API_KEY:
+            try:
+                await _deliver_generated_presentation(bot, order)
+                return
+            except Exception as error:
+                from bot.services.ai_content import AIContentError
+
+                reason = str(error) if isinstance(error, AIContentError) else type(error).__name__
+                failure_reason = f"\n⚠️ AI avtomatik tayyorlay olmadi: {reason}"
+                logger.exception("Taqdimotni AI bilan tayyorlash yoki yuborish muvaffaqiyatsiz (order_id=%s)", record_id)
+        else:
+            failure_reason = "\n⚠️ GEMINI_API_KEY sozlanmagan — qo'lda tayyorlang."
         text = (
             f"🆕 Fayl tayyorlanishi kerak\n"
             f"Buyurtma №{record_id}\n"
@@ -146,6 +216,7 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
             f"📝 Mavzu: {order['topic']}\n"
             f"📑 Sahifalar: {order['pages']}\n"
             f"👤 USER_ID: {order['telegram_id']}\n\n"
+            f"{failure_reason}\n"
             f"Faylni captioniga /send {record_id} yozib guruhga yuboring yoki ushbu xabarga REPLY qiling."
         )
     else:
@@ -164,7 +235,11 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
     try:
         await bot.send_message(FILES_GROUP_ID, text)
     except Exception:
-        pass
+        logger.exception(
+            "Fayl tayyorlash xabarini guruhga yuborib bo'lmadi (chat_id=%s record_id=%s)",
+            FILES_GROUP_ID,
+            record_id,
+        )
 
 
 async def _post_to_payment_group(bot: Bot, text: str):

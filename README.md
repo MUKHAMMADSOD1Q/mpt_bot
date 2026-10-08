@@ -10,6 +10,7 @@ Bu loyiha sizning `PreuzMPT.docx` va `prezintatsiya.uz` TZ fayllaringiz asosida 
 - Foydalanuvchi uchun MPT balans tizimi (SQLite bazasida)
 - Admin uchun buyruqlar: balans qo'shish, obuna faollashtirish, buyurtmalarni ko'rish/bajarish/rad etish
 - Admin paneldan foydalanuvchilarning Telegram ismi, aloqa/balans/obuna ma'lumotlari va buyurtmalar tarixini Excel (`.xlsx`) ko'rinishida olish
+- Gemini API ulanganida, to'langan taqdimotlarni shablon asosida AI matni bilan to'ldirib foydalanuvchiga avtomatik yuborish
 - "Boshqa xizmatlar" (Logo, QR, Taklifnoma va h.k.) uchun to'g'ridan-to'g'ri adminga yo'naltirish
 - Kelajakda kengaytirish uchun shablon-asosida PowerPoint generatsiya moduli (`bot/services/pptx_generator.py`)
 
@@ -57,6 +58,22 @@ Quyida **nolldan production'gacha** bo'lgan barcha qadamlar yozilgan.
    python main.py
    ```
    Telegram'da botingizga `/start` yuboring — javob bersa, hammasi to'g'ri sozlangan.
+
+### AI yordamida taqdimot tayyorlash
+
+1. [Google AI Studio](https://aistudio.google.com/apikey) orqali Gemini API kaliti yarating.
+2. Lokal ishga tushirishda `.env` faylidagi `GEMINI_API_KEY` qiymatini to'ldiring; Railway'da
+   **Variables** bo'limiga `GEMINI_API_KEY` nomli maxfiy o'zgaruvchi qo'shing. Kalitni chatga yoki GitHub'ga yubormang.
+3. bot restart/deploy bo'lgach, to'lov tasdiqlangan taqdimotlar Gemini Flash yordamida matnlar
+   tayyorlanib, buyurtmachiga `.pptx` sifatida avtomatik yuboriladi. Tegishli tarif shabloni
+   bo'lmasa, `bepul` papkasidagi shablonlardan foydalanadi.
+4. API kaliti yo'q yoki Gemini vaqtincha ishlamasa, buyurtma yo'qolmaydi: fayllar guruhida
+   qo'lda tayyorlash uchun buyurtma va sabab ko'rsatiladi.
+
+Gemini'ning bepul API kvotasi model va loyiha bo'yicha o'zgaradi; aniq joriy RPM/RPD limitini
+[AI Studio rate limits](https://aistudio.google.com/rate-limit) sahifasida tekshiring.
+Bepul xizmatda yuborilgan matnlar Google mahsulotlarini yaxshilash uchun ishlatilishi mumkin.
+Bot AI'ga mavzu va tilni yuboradi, ism/Telegram ID/telefon yubormaydi.
 
 ---
 
@@ -327,14 +344,20 @@ beraman (hozircha faqat panelga havola beradi).
 
 | Vazifa | Tavsiya | Narx/limit | Sozlash |
 |---|---|---|---|
-| **Chek tekshirish** (rasm/PDF tushunish) | Google **Gemini** (2.5 Flash) | **Bepul** kvota kuniga yetarlicha katta | `.env`: `GEMINI_API_KEY` |
-| **Slayd/referat matni** | **DeepSeek** (deepseek-chat) | ~$0.14 / $0.28 har 1M kirish/chiqish token — 1000 taqdimot ham bir necha dollar | `.env`: `DEEPSEEK_API_KEY` |
+| **Chek tekshirish** (rasm/PDF tushunish) | Google **Gemini** | Bepul kvota mavjud; aniq so'rov/token limiti AI Studio loyihasiga qarab o'zgaradi | `.env`: `GEMINI_API_KEY` |
+| **Taqdimot matni va PPTX** | Google **Gemini 2.5 Flash** | Bepul tier'da input/output tokenlar bepul; aniq joriy RPM/RPD limit AI Studio'da ko'rinadi | `.env`: `GEMINI_API_KEY` |
 
-Ikkalasi ham allaqachon kodga ulangan (`bot/services/ai_verify.py`,
-`bot/services/ai_content.py`) — faqat `.env` fayliga kalitlarni qo'shsangiz kifoya.
-Narxlar tez-tez o'zgaradi, shuning uchun ishga tushirishdan oldin rasmiy narx
-sahifalarini (https://ai.google.dev/gemini-api/docs, https://api-docs.deepseek.com)
-tekshirib qo'ying.
+Taqdimot generatsiyasi `bot/services/ai_content.py` orqali bir marta strukturali JSON
+so'rov yuboradi. Gemini limiti tugasa yoki kalit sozlanmagan bo'lsa, buyurtma to'lov
+qilingan holatda qoladi va fayllar guruhida qo'lda tayyorlash uchun ko'rsatiladi.
+Gemini bepul tarifida tokenlar bepul bo'ladi, ammo bu cheksiz foydalanish degani emas:
+model limitlari o'zgaradi va AI Studio'da ko'rinadi. OpenAI va xAI/Grok API'da narxlar
+foydalanilgan tokenlarga qarab belgilanadi; akkauntga xos bepul kredit yoki aksiya bor-yo'qligini
+provider panelidan tekshiring. Rasmiy sahifalar:
+[Gemini narxlari](https://ai.google.dev/gemini-api/docs/pricing),
+[Gemini limitlari](https://ai.google.dev/gemini-api/docs/rate-limits),
+[OpenAI API narxlari](https://developers.openai.com/api/docs/pricing),
+[xAI narxlari](https://docs.x.ai/developers/pricing).
 
 ### 8.7 Server: Supabase haqida muhim eslatma
 
@@ -360,8 +383,8 @@ o'tish kodini alohida yozib beraman (`asyncpg` yoki `supabase-py` bilan).
 ```
 OWNER_ID=...              # sizning Telegram ID'ingiz - /admin shu uchun ishlaydi
 PAYMENT_GROUP_ID=...      # /groupid orqali oling
-GEMINI_API_KEY=...        # bepul - chek tekshirish uchun
-DEEPSEEK_API_KEY=...      # ixtiyoriy, keyinroq - slayd matni uchun
+GEMINI_API_KEY=...        # chek tekshirish va PPTX matni generatsiyasi
+DEEPSEEK_API_KEY=...      # boshqa mavjud DeepSeek integratsiyalari uchun
 ```
 
 Karta raqamlari va admin ismi hozircha `bot/config.py` ichida to'g'ridan-to'g'ri
