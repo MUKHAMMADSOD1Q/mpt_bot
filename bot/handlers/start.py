@@ -1,10 +1,12 @@
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.config import OWNER_ID
 from bot.database import get_or_create_user
 from bot.keyboards import main_menu_kb, admin_menu_kb, contact_kb, games_kb
+from bot.states import OrderPresentation
 from bot.texts import ABOUT_US_HTML, build_guide, chunk_text
 
 router = Router()
@@ -37,11 +39,13 @@ async def cmd_menu(message: Message):
 
 
 @router.message(F.text == "🤖 Sun'iy intellekt yordamida")
-async def ai_menu(message: Message):
+async def ai_menu(message: Message, state: FSMContext):
+    await state.clear()
+    await state.update_data(ai_only_free=True)
+    await state.set_state(OrderPresentation.waiting_topic)
     await message.answer(
-        "🤖 Bu bo'lim vaqtinchalik ishlamayapti, tez vaqt ichida ishga tushiriladi.\n\n"
-        "Murojaat uchun admin yoki owner profillariga yozing:",
-        reply_markup=contact_kb(),
+        "🤖 Hozircha AI faqat bepul taqdimot tayyorlaydi.\n"
+        "Taqdimot mavzusini kiriting:",
     )
 
 

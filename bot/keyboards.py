@@ -161,6 +161,12 @@ def tariff_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def free_tariff_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🆓 Bepul", callback_data="tariff:bepul")
+    return builder.as_markup()
+
+
 def subscription_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for key, s in SUBSCRIPTIONS.items():

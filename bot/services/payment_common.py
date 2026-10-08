@@ -23,7 +23,11 @@ async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
     from bot.services.ai_content import generate_presentation_slides
     from bot.services.pptx_generator import build_presentation, pick_random_template
 
-    template_path = pick_random_template(order["tariff"]) or pick_random_template("bepul")
+    if order["tariff"] != "bepul":
+        raise ValueError("AI orqali hozircha faqat bepul tarifdagi buyurtma tayyorlanadi.")
+    template_path = pick_random_template(
+        "bepul", allowed_files=("1.pptx", "2.pptx", "3.pptx"),
+    )
     if not template_path:
         raise RuntimeError("Taqdimot uchun PowerPoint shablon topilmadi.")
 
@@ -197,7 +201,7 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
                 order["status"],
             )
             return
-        if GEMINI_API_KEY:
+        if order["tariff"] == "bepul" and GEMINI_API_KEY:
             try:
                 await _deliver_generated_presentation(bot, order)
                 return
@@ -207,8 +211,10 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
                 reason = str(error) if isinstance(error, AIContentError) else type(error).__name__
                 failure_reason = f"\n⚠️ AI avtomatik tayyorlay olmadi: {reason}"
                 logger.exception("Taqdimotni AI bilan tayyorlash yoki yuborish muvaffaqiyatsiz (order_id=%s)", record_id)
-        else:
+        elif order["tariff"] == "bepul":
             failure_reason = "\n⚠️ GEMINI_API_KEY sozlanmagan — qo'lda tayyorlang."
+        else:
+            failure_reason = "\nℹ️ AI generatsiyasi hozircha faqat bepul tarifda ishlaydi."
         text = (
             f"🆕 Fayl tayyorlanishi kerak\n"
             f"Buyurtma №{record_id}\n"
@@ -219,6 +225,20 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
             f"{failure_reason}\n"
             f"Faylni captioniga /send {record_id} yozib guruhga yuboring yoki ushbu xabarga REPLY qiling."
         )
+        if failure_reason and order["tariff"] == "bepul":
+            try:
+                await bot.send_message(
+                    order["telegram_id"],
+                    "⚠️ Bepul AI taqdimotni hozir avtomatik tayyorlay olmadi. "
+                    "Buyurtmangiz adminga yuborildi va qo'lda tayyorlanadi.",
+                )
+            except Exception:
+                logger.exception(
+                    "AI generatsiyasi bajarilmagani haqida foydalanuvchiga xabar yuborilmadi "
+                    "(order_id=%s telegram_id=%s)",
+                    record_id,
+                    order["telegram_id"],
+                )
     else:
         service = await get_service_order(record_id)
         if not service:

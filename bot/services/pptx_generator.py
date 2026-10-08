@@ -42,13 +42,16 @@ from pptx.util import Inches, Pt
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "templates")
 
 
-def pick_random_template(tariff_key: str) -> str | None:
+def pick_random_template(tariff_key: str, allowed_files: tuple[str, ...] | None = None) -> str | None:
     """Berilgan tarif uchun assets/templates/<tariff_key>/ papkasidan tasodifiy
     bitta .pptx shablonni tanlaydi. Papka bo'sh yoki mavjud bo'lmasa None qaytaradi."""
     folder = os.path.join(TEMPLATES_DIR, tariff_key)
     if not os.path.isdir(folder):
         return None
     files = [f for f in os.listdir(folder) if f.lower().endswith(".pptx")]
+    if allowed_files is not None:
+        allowed = {name.lower() for name in allowed_files}
+        files = [name for name in files if name.lower() in allowed]
     if not files:
         return None
     return os.path.join(folder, random.choice(files))

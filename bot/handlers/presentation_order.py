@@ -8,6 +8,7 @@ from aiogram.types import Message, CallbackQuery, User
 from bot.states import OrderPresentation, OrderConfirm, PreCal
 from bot.keyboards import (
     skip_kb, language_choice_kb, presentation_entry_kb, precal_tariff_kb, precal_approve_kb,
+    free_tariff_kb,
 )
 from bot.services.validators import is_valid_topic, is_valid_pages, is_valid_full_name, is_valid_optional_text
 from bot.services.pricing import calculate_price, format_som
@@ -256,23 +257,31 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
 
 async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
     await state.set_state(OrderPresentation.waiting_tariff)
+    data = await state.get_data()
+    keyboard = free_tariff_kb() if data.get("ai_only_free") else tariff_kb()
     text = (
-        "Ta'rif turini tanlang:\n\n"
+        ("AI taqdimot uchun hozircha faqat bepul tarif mavjud.\n\n" if data.get("ai_only_free") else "")
+        + "Ta'rif turini tanlang:\n\n"
         "<i>Narxlar taqdimotning bir sahifasi uchun ko'rsatilgan.</i>"
     )
     if edit:
         try:
-            await message.edit_text(text, parse_mode="HTML", reply_markup=tariff_kb())
+            await message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
             return
         except TelegramBadRequest:
             pass
-    await message.answer(text, parse_mode="HTML", reply_markup=tariff_kb())
+    await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @router.callback_query(OrderPresentation.waiting_tariff, F.data.startswith("tariff:"))
 async def process_tariff(callback: CallbackQuery, state: FSMContext):
+    tariff_key = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    if data.get("ai_only_free") and tariff_key != "bepul":
+        await callback.answer("AI orqali hozircha faqat bepul tarif ishlaydi.", show_alert=True)
+        return
     await callback.answer()
-    await build_summary(callback.message, state, callback.data.split(":", 1)[1], callback.from_user)
+    await build_summary(callback.message, state, tariff_key, callback.from_user)
 
 
 async def build_summary(message: Message, state: FSMContext, tariff_key: str, from_user: User):

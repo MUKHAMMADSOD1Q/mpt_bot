@@ -64,9 +64,11 @@ Quyida **nolldan production'gacha** bo'lgan barcha qadamlar yozilgan.
 1. [Google AI Studio](https://aistudio.google.com/apikey) orqali Gemini API kaliti yarating.
 2. Lokal ishga tushirishda `.env` faylidagi `GEMINI_API_KEY` qiymatini to'ldiring; Railway'da
    **Variables** bo'limiga `GEMINI_API_KEY` nomli maxfiy o'zgaruvchi qo'shing. Kalitni chatga yoki GitHub'ga yubormang.
-3. bot restart/deploy bo'lgach, to'lov tasdiqlangan taqdimotlar Gemini Flash yordamida matnlar
-   tayyorlanib, buyurtmachiga `.pptx` sifatida avtomatik yuboriladi. Tegishli tarif shabloni
-   bo'lmasa, `bepul` papkasidagi shablonlardan foydalanadi.
+3. Bot restart/deploy bo'lgach, “🤖 Sun'iy intellekt yordamida” bo'limi mavzuni so'rab,
+   bepul taqdimot buyurtmasini boshlaydi. Shuningdek, oddiy buyurtmada “Bepul” tarifi
+   tanlansa, to'lov tasdiqlangach Gemini matnlarni tayyorlab `.pptx`ni yuboradi.
+   Generatsiya uchta `assets/templates/bepul/1.pptx`, `2.pptx`, `3.pptx` shablonidan
+   tasodifiy bittasiga joylanadi; boshqa tariflar hozircha AI bilan generatsiya qilinmaydi.
 4. API kaliti yo'q yoki Gemini vaqtincha ishlamasa, buyurtma yo'qolmaydi: fayllar guruhida
    qo'lda tayyorlash uchun buyurtma va sabab ko'rsatiladi.
 
