@@ -5,6 +5,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import SOFF_PAGE_SIZE, SOFF_SELLER_PAGE_URL
+from bot.i18n import menu_labels
 from bot.database import list_ready_products
 from bot.services.soff_client import fetch_seller_products
 
@@ -63,7 +64,7 @@ async def _render_page(page: int, search: str | None = None):
     return text, builder.as_markup()
 
 
-@router.message(F.text == "🛍 Tayyor mahsulotlar")
+@router.message(F.text.in_(menu_labels("products")))
 async def products_entry(message: Message, state: FSMContext):
     await state.clear()
     text, kb = await _render_page(1)

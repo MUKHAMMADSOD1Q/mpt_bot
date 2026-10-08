@@ -5,7 +5,7 @@ from aiogram.types import Message
 from bot.config import OWNER_ID
 from bot.keyboards import (
     admin_menu_kb, business_services_kb, business_size_kb, click_app_choice_kb, click_wait_kb, independent_work_type_kb,
-    language_choice_kb, main_menu_kb, precal_tariff_kb,
+    language_choice_kb, precal_tariff_kb,
     skip_kb, skip_or_upload_kb, tariff_kb, ui_platform_kb,
     website_style_kb, yes_no_kb,
 )
@@ -18,6 +18,8 @@ from bot.states import (
 )
 from bot.handlers.soff_browse import SoffSearch
 from bot.database import get_user
+from bot.i18n import menu_labels
+from bot.services.user_locale import localized_main_menu
 
 router = Router()
 
@@ -27,7 +29,7 @@ async def _show_previous(message: Message, state: FSMContext, previous, prompt: 
     await message.answer(prompt, reply_markup=keyboard)
 
 
-@router.message(F.text == "⬅️ Ortga")
+@router.message(F.text.in_(menu_labels("back")))
 async def go_back(message: Message, state: FSMContext):
     current = await state.get_state()
     data = await state.get_data()
@@ -37,14 +39,14 @@ async def go_back(message: Message, state: FSMContext):
                              "Qaysi ta'rifda hisoblaymiz?", precal_tariff_kb())
     elif current == PreCal.waiting_tariff.state:
         await state.clear()
-        await message.answer("Taqdimot bo'limiga qaytdingiz.", reply_markup=main_menu_kb())
+        await message.answer("Taqdimot bo'limiga qaytdingiz.", reply_markup=await localized_main_menu(message.from_user.id))
     elif current in (PreCal.waiting_language.state, PreCal.waiting_approval.state):
         await _show_previous(message, state, PreCal.waiting_pages, "Taqdimot nechta sahifali bo'lsin?")
     elif current == OrderPresentation.waiting_pages.state:
         await _show_previous(message, state, OrderPresentation.waiting_topic, "Mavzu nomini kiriting:")
     elif current == OrderPresentation.waiting_topic.state:
         await state.clear()
-        await message.answer("Taqdimot bo'limiga qaytdingiz.", reply_markup=main_menu_kb())
+        await message.answer("Taqdimot bo'limiga qaytdingiz.", reply_markup=await localized_main_menu(message.from_user.id))
     elif current == OrderPresentation.waiting_fullname.state:
         previous = OrderPresentation.waiting_topic if data.get("precal") else OrderPresentation.waiting_pages
         prompt = "Taqdimot mavzusini kiriting:" if data.get("precal") else "Taqdimotingiz nechta sahifali bo'lsin?"
@@ -93,7 +95,7 @@ async def go_back(message: Message, state: FSMContext):
                              "Ish turini tanlang:", independent_work_type_kb())
     elif current == IndependentWork.waiting_type.state:
         await state.clear()
-        await message.answer("Bosh menyuga qaytdingiz.", reply_markup=main_menu_kb())
+        await message.answer("Bosh menyuga qaytdingiz.", reply_markup=await localized_main_menu(message.from_user.id))
     elif current == IndependentWork.waiting_pages.state:
         await _show_previous(message, state, IndependentWork.waiting_topic, "Mavzu nomini kiriting:")
     elif current == IndependentWork.waiting_images.state:
@@ -119,13 +121,13 @@ async def go_back(message: Message, state: FSMContext):
         payment = await get_click_payment(merchant_trans_id) if merchant_trans_id else None
         await state.clear()
         if payment:
-            await message.answer("To'lov jarayoniga qaytdingiz.", reply_markup=main_menu_kb())
+            await message.answer("To'lov jarayoniga qaytdingiz.", reply_markup=await localized_main_menu(message.from_user.id))
             await message.answer(
                 "To'lovni davom ettiring yoki holatini tekshiring.",
                 reply_markup=click_wait_kb(merchant_trans_id, build_checkout_url(payment["amount_som"], merchant_trans_id)),
             )
         else:
-            await message.answer("Bosh menyuga qaytdingiz.", reply_markup=main_menu_kb())
+            await message.answer("Bosh menyuga qaytdingiz.", reply_markup=await localized_main_menu(message.from_user.id))
     elif current == CardPayment.waiting_receipt.state:
         await _show_previous(message, state, CardPayment.waiting_phone,
                              "Telefon raqamingizni qayta kiriting:")
@@ -195,12 +197,15 @@ async def go_back(message: Message, state: FSMContext):
         await message.answer("Admin menyusiga qaytdingiz.")
     elif current == SoffSearch.waiting_query.state:
         await state.clear()
-        await message.answer("Tayyor mahsulotlar ro'yxatiga qaytdingiz.", reply_markup=main_menu_kb())
+        await message.answer(
+            "Tayyor mahsulotlar ro'yxatiga qaytdingiz.",
+            reply_markup=await localized_main_menu(message.from_user.id),
+        )
     else:
         await state.clear()
         user = await get_user(message.from_user.id)
         markup = (
             admin_menu_kb(super_admin=message.from_user.id == OWNER_ID)
-            if user and user.get("is_admin_mode") else main_menu_kb()
+            if user and user.get("is_admin_mode") else await localized_main_menu(message.from_user.id)
         )
         await message.answer("Menyuga qaytdingiz.", reply_markup=markup)

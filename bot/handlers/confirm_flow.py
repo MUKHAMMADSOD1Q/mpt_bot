@@ -3,7 +3,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 from bot.states import OrderConfirm
-from bot.keyboards import main_menu_kb
 from bot.services.group_orders import (
     post_pending_group_message, mark_group_message, confirm2_kb, attach_keyboard, ACCEPTED_MARK, CANCELLED_MARK,
 )
@@ -14,6 +13,7 @@ from bot.database import (
     deduct_mpt_balance, create_service_order, set_service_order_group_message,
     get_user, set_order_paid_via, update_user_telegram_profile,
 )
+from bot.services.user_locale import localized_main_menu
 from bot.services.payment_common import subscription_covers
 from bot.services.group_orders import append_order_history
 
@@ -54,7 +54,10 @@ async def flow_cancelled(callback: CallbackQuery, state: FSMContext, bot: Bot):
     if data.get("group_message_id"):
         await mark_group_message(bot, data["group_message_id"], data["group_full_text"], CANCELLED_MARK)
     await state.clear()
-    await callback.message.answer("Buyurtma bekor qilindi.", reply_markup=main_menu_kb())
+    await callback.message.answer(
+        "Buyurtma bekor qilindi.",
+        reply_markup=await localized_main_menu(callback.from_user.id),
+    )
     await callback.answer()
 
 
@@ -100,7 +103,7 @@ async def _finalize_presentation(callback: CallbackQuery, state: FSMContext, bot
         await callback.message.answer(
             f"✅ To'lov qabul qilindi ({paid_via}). №{order_id} buyurtmangiz ishlanmoqda — "
             "ish ko'lamiga qarab 1-5 soat ichida tayyor bo'lib, adminlar tomonidan yuboriladi.",
-            reply_markup=main_menu_kb(),
+            reply_markup=await localized_main_menu(telegram_id),
         )
         from bot.services.payment_common import notify_files_group_ready
         await notify_files_group_ready(bot, kind="order", record_id=order_id)
@@ -131,7 +134,7 @@ async def _finalize_service(callback: CallbackQuery, state: FSMContext, bot: Bot
     if price_som:
         await callback.message.answer(
             "To'lovni Click yoki karta orqali amalga oshirishingiz mumkin:",
-            reply_markup=main_menu_kb(),
+            reply_markup=await localized_main_menu(telegram_id),
         )
         await ask_payment_method(callback.message, state, purpose="service", amount_som=price_som, payload=str(service_order_id))
     else:
@@ -139,5 +142,5 @@ async def _finalize_service(callback: CallbackQuery, state: FSMContext, bot: Bot
         await callback.message.answer(
             "✅ Buyurtmangiz qabul qilindi! Narxi ishning hajmiga qarab belgilanadi — "
             "tez orada admin siz bilan bog'lanib, aniq narxni va to'lov usulini kelishadi.",
-            reply_markup=main_menu_kb(),
+            reply_markup=await localized_main_menu(telegram_id),
         )

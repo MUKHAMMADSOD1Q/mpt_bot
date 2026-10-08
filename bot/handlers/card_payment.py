@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.states import CardPayment
-from bot.keyboards import main_menu_kb, card_timeout_kb, card_cancel_kb
+from bot.keyboards import card_timeout_kb, card_cancel_kb
 from bot.config import (
     CARD_NUMBERS, CARD_OWNER_NAME, PAYMENT_GROUP_ID,
     CARD_PAYMENT_TIMEOUT_SECONDS,
@@ -21,6 +21,7 @@ from bot.database import (
     get_card_payment, set_card_payment_group_message, update_user_phone, get_user,
     list_admin_ids,
 )
+from bot.services.user_locale import localized_main_menu
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -130,7 +131,10 @@ async def give_up_payment(callback: CallbackQuery, state: FSMContext):
         task.cancel()
     await set_card_payment_status(payment_id, "bekor_qilindi")
     await state.clear()
-    await callback.message.answer("❌ To'lov bekor qilindi.", reply_markup=main_menu_kb())
+    await callback.message.answer(
+        "❌ To'lov bekor qilindi.",
+        reply_markup=await localized_main_menu(callback.from_user.id),
+    )
     await callback.answer()
 
 
@@ -152,7 +156,10 @@ async def process_receipt(message: Message, state: FSMContext, bot: Bot):
         mime_type = message.document.mime_type or "application/octet-stream"
 
     await attach_receipt(payment_id, file_id, mime_type)
-    await message.answer("✅ Chek qabul qilindi, adminlarga yuborilmoqda...", reply_markup=main_menu_kb())
+    await message.answer(
+        "✅ Chek qabul qilindi, adminlarga yuborilmoqda...",
+        reply_markup=await localized_main_menu(telegram_id),
+    )
     user = await get_user(telegram_id)
     username = user["username"] if user else "-"
     phone = (user.get("phone") if user else None) or "-"
@@ -196,11 +203,14 @@ async def process_receipt(message: Message, state: FSMContext, bot: Bot):
                 logger.exception("Karta chekini adminga shaxsiy yuborib bo'lmadi (admin_id=%s)", admin_id)
 
     if delivered_to:
-        await message.answer("✅ Chek adminlarga yuborildi, tekshiruv kutilmoqda.", reply_markup=main_menu_kb())
+        await message.answer(
+            "✅ Chek adminlarga yuborildi, tekshiruv kutilmoqda.",
+            reply_markup=await localized_main_menu(telegram_id),
+        )
     else:
         await message.answer(
             "⚠️ Chek qabul qilindi, ammo adminlarga yetkazilmadi. Iltimos, admin bilan bog'laning.",
-            reply_markup=main_menu_kb(),
+            reply_markup=await localized_main_menu(telegram_id),
         )
 
     try:

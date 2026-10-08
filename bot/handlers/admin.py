@@ -13,7 +13,7 @@ from aiogram.types import Message, CallbackQuery, FSInputFile, BufferedInputFile
 
 from bot.config import DB_PATH, PAYMENT_GROUP_ID, SUBSCRIPTIONS, OWNER_ID, SOFF_SELLER_PANEL_URL, TARIFFS
 from bot.states import AdminBroadcast, AdminSetPrice
-from bot.keyboards import admin_menu_kb, main_menu_kb
+from bot.keyboards import admin_menu_kb
 from bot.services.pricing import format_som
 from bot.services.legacy_import import import_legacy_db, is_sqlite_file
 from bot.services.payment_common import subscription_covers, send_payment_request_dm
@@ -23,6 +23,7 @@ from bot.database import (
     get_service_order, set_service_order_price, is_admin_user, list_admin_ids,
     add_admin, remove_admin, list_all_users_with_order_history,
 )
+from bot.services.user_locale import localized_main_menu
 
 router = Router()
 
@@ -49,7 +50,10 @@ async def toggle_admin_mode(message: Message):
             reply_markup=admin_menu_kb(super_admin=message.from_user.id == OWNER_ID),
         )
     else:
-        await message.answer("👤 Oddiy foydalanuvchi rejasiga qaytdingiz.", reply_markup=main_menu_kb())
+        await message.answer(
+            "👤 Oddiy foydalanuvchi rejasiga qaytdingiz.",
+            reply_markup=await localized_main_menu(message.from_user.id),
+        )
 
 
 @router.message(F.text == "🔙 Oddiy rejimga qaytish")
@@ -57,7 +61,10 @@ async def back_to_user_mode(message: Message):
     if not await is_admin(message.from_user.id):
         return
     await set_admin_mode(message.from_user.id, False)
-    await message.answer("👤 Oddiy foydalanuvchi rejasiga qaytdingiz.", reply_markup=main_menu_kb())
+    await message.answer(
+        "👤 Oddiy foydalanuvchi rejasiga qaytdingiz.",
+        reply_markup=await localized_main_menu(message.from_user.id),
+    )
 
 
 @router.message(Command("groupid"))

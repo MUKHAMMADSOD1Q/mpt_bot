@@ -2,6 +2,7 @@ from aiogram.types import InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardBut
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import TARIFFS, SUBSCRIPTIONS, INDEPENDENT_WORK_TYPES, WORK_LANGUAGES, WEBSITE_STYLE_PRICES
+from bot.i18n import SUPPORTED_LANGUAGES, tr
 
 
 def admin_menu_kb(super_admin: bool = False) -> ReplyKeyboardMarkup:
@@ -20,35 +21,86 @@ def admin_menu_kb(super_admin: bool = False) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 
-def main_menu_kb() -> ReplyKeyboardMarkup:
+def main_menu_kb(language: str = "uz") -> ReplyKeyboardMarkup:
     kb = [
-        [KeyboardButton(text="📊 Taqdimotga buyurtma berish")],
-        [KeyboardButton(text="📝 Mustaqil ishlarga buyurtma berish")],
-        [KeyboardButton(text="🏢 Tadbirkorlar uchun")],
-        [KeyboardButton(text="🛍 Tayyor mahsulotlar")],
-        [KeyboardButton(text="🤖 Sun'iy intellekt yordamida")],
-        [KeyboardButton(text="🎮 O'yin va ko'ngil ochish")],
-        [KeyboardButton(text="💳 Balans va obuna")],
-        [KeyboardButton(text="📖 Foydalanish qo'llanmasi")],
-        [KeyboardButton(text="ℹ️ Admin bilan bog'lanish")],
-        [KeyboardButton(text="⬅️ Ortga")],
-        [KeyboardButton(text="🤝 Biz haqimizda")],
+        [KeyboardButton(text=tr(language, "menu_presentation"))],
+        [KeyboardButton(text=tr(language, "menu_independent"))],
+        [KeyboardButton(text=tr(language, "menu_business"))],
+        [KeyboardButton(text=tr(language, "menu_products"))],
+        [KeyboardButton(text=tr(language, "menu_ai"))],
+        [KeyboardButton(text=tr(language, "menu_games"))],
+        [KeyboardButton(text=tr(language, "menu_balance"))],
+        [KeyboardButton(text=tr(language, "menu_settings"))],
+        [KeyboardButton(text=tr(language, "menu_back"))],
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
 
-def contact_kb() -> InlineKeyboardMarkup:
+def contact_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="👑 Bot asoschisi va PreUz bosh direktori: Muhammadsodiq", url="https://t.me/MUKHAMMADSODlQ")
-    builder.button(text="👤 Ikkinchi akkaunt: Muhammadsodiq Nigmatov", url="https://t.me/MUHAMMADS0DlQ")
-    builder.button(text="🧑\u200d💼 Admin1", url="https://t.me/preuzadmin")
+    labels = {
+        "uz": ["👑 Bot asoschisi va PreUz bosh direktori: Muhammadsodiq", "👤 Ikkinchi akkaunt: Muhammadsodiq Nigmatov", "🧑‍💼 Admin1"],
+        "ru": ["👑 Основатель бота и директор PreUz: Мухаммадсодик", "👤 Второй аккаунт: Мухаммадсодик Нигматов", "🧑‍💼 Администратор 1"],
+        "en": ["👑 Bot founder and PreUz CEO: Muhammadsodiq", "👤 Second account: Muhammadsodiq Nigmatov", "🧑‍💼 Admin 1"],
+        "tg": ["👑 Асосгузори бот ва роҳбари PreUz: Muhammadsodiq", "👤 Ҳисоби дуюм: Muhammadsodiq Nigmatov", "🧑‍💼 Маъмур 1"],
+        "kk": ["👑 Бот негізін қалаушы және PreUz басшысы: Muhammadsodiq", "👤 Екінші аккаунт: Muhammadsodiq Nigmatov", "🧑‍💼 Әкімші 1"],
+        "ky": ["👑 Боттун негиздөөчүсү жана PreUz жетекчиси: Muhammadsodiq", "👤 Экинчи аккаунт: Muhammadsodiq Nigmatov", "🧑‍💼 Администратор 1"],
+        "tk": ["👑 Boty esaslandyryjy we PreUz ýolbaşçysy: Muhammadsodiq", "👤 Ikinji hasap: Muhammadsodiq Nigmatov", "🧑‍💼 Administrator 1"],
+    }
+    for text, url in zip(labels.get(language, labels["uz"]), (
+        "https://t.me/MUKHAMMADSODlQ", "https://t.me/MUHAMMADS0DlQ", "https://t.me/preuzadmin",
+    )):
+        builder.button(text=text, url=url)
     builder.adjust(1)
     return builder.as_markup()
 
 
-def admin_contact_prompt_kb() -> InlineKeyboardMarkup:
+def admin_contact_prompt_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="👤 Admin bilan bog'lanish", callback_data="show_admin_contacts")
+    text = {
+        "uz": "👤 Admin bilan bog'lanish", "ru": "👤 Связаться с администратором",
+        "en": "👤 Contact an admin", "tg": "👤 Тамос бо маъмур",
+        "kk": "👤 Әкімшімен байланысу", "ky": "👤 Администратор менен байланышуу",
+        "tk": "👤 Administrator bilen habarlaşmak",
+    }.get(language, "👤 Admin bilan bog'lanish")
+    builder.button(text=text, callback_data="show_admin_contacts")
+    return builder.as_markup()
+
+
+def settings_kb(language: str = "uz") -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for action, key in (
+        ("guide", "settings_guide"),
+        ("contact", "settings_contact"),
+        ("about", "settings_about"),
+        ("language", "settings_language"),
+    ):
+        builder.button(text=tr(language, key), callback_data=f"settings:{action}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def bot_language_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for code, label in SUPPORTED_LANGUAGES.items():
+        builder.button(text=label, callback_data=f"botlang:{code}")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def manual_photo_kb(language: str = "uz") -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=tr(language, "finish_photos"), callback_data="manual:finish_photos")
+    builder.button(text=tr(language, "skip_photos"), callback_data="manual:skip_photos")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def manual_review_kb(presentation_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text=tr("uz", "manual_approve"), callback_data=f"manual:approve:{presentation_id}")
+    builder.button(text=tr("uz", "manual_reject"), callback_data=f"manual:reject:{presentation_id}")
+    builder.adjust(1)
     return builder.as_markup()
 
 
@@ -167,9 +219,9 @@ def tariff_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def free_tariff_kb() -> InlineKeyboardMarkup:
+def free_tariff_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="🆓 Bepul", callback_data="tariff:bepul")
+    builder.button(text=tr(language, "free_tariff"), callback_data="tariff:bepul")
     return builder.as_markup()
 
 
@@ -181,9 +233,9 @@ def subscription_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def skip_kb() -> InlineKeyboardMarkup:
+def skip_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="⏭ O'tkazib yuborish", callback_data="skip")
+    builder.button(text=tr(language, "skip_step"), callback_data="skip")
     return builder.as_markup()
 
 

@@ -78,6 +78,24 @@ async def init_db():
             )
         """)
         await db.execute("""
+            CREATE TABLE IF NOT EXISTS manual_presentations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER NOT NULL,
+                topic TEXT NOT NULL,
+                pages INTEGER NOT NULL,
+                full_name TEXT NOT NULL,
+                institution TEXT,
+                direction TEXT,
+                language TEXT NOT NULL,
+                paragraphs TEXT NOT NULL,
+                image_file_ids TEXT NOT NULL DEFAULT '[]',
+                template_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'generating',
+                document_file_id TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS click_payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 telegram_id INTEGER,
@@ -176,6 +194,63 @@ async def get_user(telegram_id: int) -> dict | None:
         cur = await db.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
         row = await cur.fetchone()
         return dict(row) if row else None
+
+
+async def set_user_language(telegram_id: int, language: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET lang = ? WHERE telegram_id = ?",
+            (language, telegram_id),
+        )
+        await db.commit()
+
+
+async def create_manual_presentation(data: dict) -> int:
+    import json
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """INSERT INTO manual_presentations
+               (telegram_id, topic, pages, full_name, institution, direction, language,
+                paragraphs, image_file_ids, template_name, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generating', ?)""",
+            (
+                data["telegram_id"], data["topic"], data["pages"], data["full_name"],
+                data.get("institution") or "", data.get("direction") or "", data["language"],
+                json.dumps(data["paragraphs"], ensure_ascii=False),
+                json.dumps(data["image_file_ids"], ensure_ascii=False),
+                data["template_name"], datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            ),
+        )
+        await db.commit()
+        return cur.lastrowid
+
+
+async def get_manual_presentation(presentation_id: int) -> dict | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT * FROM manual_presentations WHERE id = ?", (presentation_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def set_manual_presentation_status(
+    presentation_id: int,
+    expected_status: str,
+    status: str,
+    document_file_id: str | None = None,
+) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(
+            """UPDATE manual_presentations
+               SET status = ?, document_file_id = COALESCE(?, document_file_id)
+               WHERE id = ? AND status = ?""",
+            (status, document_file_id, presentation_id, expected_status),
+        )
+        await db.commit()
+        return cur.rowcount == 1
 
 
 async def add_mpt_balance(telegram_id: int, amount: float):

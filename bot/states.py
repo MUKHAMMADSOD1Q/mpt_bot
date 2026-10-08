@@ -11,6 +11,11 @@ class OrderPresentation(StatesGroup):
     waiting_tariff = State()
 
 
+class ManualPresentation(StatesGroup):
+    waiting_essay = State()
+    waiting_photos = State()
+
+
 class PreCal(StatesGroup):
     waiting_tariff = State()
     waiting_pages = State()

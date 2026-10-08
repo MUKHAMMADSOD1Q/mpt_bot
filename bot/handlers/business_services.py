@@ -12,6 +12,7 @@ from bot.config import (
     TAKLIFNOMA_PRICE, REZYUME_PRICE, YOUTUBE_BANNER_PRICE, QR_GENERATOR_PRICE,
     UI_DESIGN_PRICE_RANGE, LOGO_PRICE_RANGE, WEBSITE_STYLE_PRICES,
 )
+from bot.i18n import menu_labels
 
 router = Router()
 
@@ -35,7 +36,7 @@ async def _user_header(from_user) -> list[str]:
     ]
 
 
-@router.message(F.text == "🏢 Tadbirkorlar uchun")
+@router.message(F.text.in_(menu_labels("business")))
 async def business_menu(message: Message):
     await message.answer(
         "Tadbirkorlar uchun qanday xizmat kerak? Tanlang:",

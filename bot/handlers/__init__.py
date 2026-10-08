@@ -3,6 +3,7 @@ from aiogram import Router
 from . import (
     navigation, admin, files_group, confirm_flow, payment_method, click_payment, card_payment,
     presentation_order, independent_work, business_services, soff_browse, balance, start,
+    manual_presentation,
 )
 
 
@@ -11,6 +12,7 @@ def get_root_router() -> Router:
     # Menyu va /start handlerlari FSM bosqichlaridan oldin tekshirilsin,
     # shunda foydalanuvchi faol buyurtmadan ham menyu orqali chiqib keta oladi.
     root.include_router(start.router)
+    root.include_router(manual_presentation.router)
     root.include_router(navigation.router)
     root.include_router(admin.router)
     root.include_router(files_group.router)

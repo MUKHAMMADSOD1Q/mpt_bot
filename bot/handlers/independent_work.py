@@ -9,11 +9,12 @@ from bot.services.pricing import format_som
 from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import MIN_PAGES, MAX_PAGES, INDEPENDENT_WORK_TYPES, LANGUAGE_SURCHARGE_PER_PAGE
 from bot.database import get_user
+from bot.i18n import menu_labels
 
 router = Router()
 
 
-@router.message(F.text == "📝 Mustaqil ishlarga buyurtma berish")
+@router.message(F.text.in_(menu_labels("independent")))
 async def start_independent_work(message: Message, state: FSMContext):
     await state.set_state(IndependentWork.waiting_type)
     await message.answer("Ish turini tanlang:", reply_markup=independent_work_type_kb())

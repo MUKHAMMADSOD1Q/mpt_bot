@@ -8,6 +8,7 @@ from bot.keyboards import subscription_kb, mpt_topup_amounts_kb
 from bot.config import SUBSCRIPTIONS, ADMIN_USERNAME, MPT_PRICE_SOM
 from bot.services.payment_common import ask_payment_method
 from bot.texts import MPT_INFO, SUB_INFO
+from bot.i18n import menu_labels
 
 router = Router()
 
@@ -20,7 +21,7 @@ def _balance_actions_kb():
     return builder.as_markup()
 
 
-@router.message(F.text == "💳 Balans va obuna")
+@router.message(F.text.in_(menu_labels("balance")))
 async def balance_menu(message: Message):
     user = await get_or_create_user(
         message.from_user.id, message.from_user.username, message.from_user.full_name,

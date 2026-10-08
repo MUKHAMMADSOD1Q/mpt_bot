@@ -15,18 +15,28 @@ from bot.services.pricing import calculate_price, format_som
 from bot.services.group_orders import begin_confirmation, tashkent_timestamp
 from bot.config import MIN_PAGES, MAX_PAGES, TARIFFS
 from bot.database import get_user, update_user_telegram_profile
+from bot.i18n import menu_labels, normalize_language, tr
 from bot.keyboards import tariff_kb
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 router = Router()
 
 
+async def _ui_language(user_id: int) -> str:
+    user = await get_user(user_id)
+    return normalize_language(user.get("lang") if user else None)
+
+
 # ==================== KIRISH: buyurtma yoki PreCal ====================
 
-@router.message(F.text == "📊 Taqdimotga buyurtma berish")
+@router.message(F.text.in_(menu_labels("presentation")))
 async def presentation_entry(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     await state.clear()
     await message.answer(
+        "What would you like to do?\n\n"
+        "🧮 <b>PreCal</b> — calculate a presentation price without placing an order."
+        if language == "en" else
         "Nima qilmoqchisiz?\n\n"
         "🧮 <b>PreCal</b> — buyurtma bermasdan taqdimot narxini hisoblab ko'rish.",
         parse_mode="HTML",
@@ -36,12 +46,14 @@ async def presentation_entry(message: Message, state: FSMContext):
 
 @router.callback_query(F.data == "pres:order")
 async def start_order(callback: CallbackQuery, state: FSMContext):
+    language = await _ui_language(callback.from_user.id)
     await state.clear()
     await state.set_state(OrderPresentation.waiting_topic)
     await callback.message.answer(
-        "Mavzu nomini kiriting:\n\n"
-        "<i>Mavzu nomini imkon qadar aniq va tushunarli kiriting! "
-        "Mavzu nomi taqdimotingizga to'g'ridan-to'g'ri ta'sir qilishi mumkin!</i>",
+        tr(language, "topic_prompt") + (
+            "\n\n<i>Please make the topic as clear and specific as possible.</i>"
+            if language == "en" else ""
+        ),
         parse_mode="HTML",
     )
     await callback.answer()
@@ -145,53 +157,55 @@ async def precal_pick(callback: CallbackQuery, state: FSMContext):
 
 @router.message(OrderPresentation.waiting_topic)
 async def process_topic(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     if not is_valid_topic(message.text or ""):
-        await message.answer("Iltimos, mavzu nomini to'g'ri kiriting (kamida 2 ta belgidan iborat, faqat raqam bo'lmasin).")
+        await message.answer(tr(language, "topic_invalid"))
         return
     await state.update_data(topic=message.text.strip())
     data = await state.get_data()
     if data.get("precal"):  # sahifa soni PreCal da allaqachon aniqlangan
         await state.set_state(OrderPresentation.waiting_fullname)
-        await message.answer("Taqdimot yuzi uchun o'z ism-familiyangizni (otasini ismi ixtiyoriy) kiriting:")
+        await message.answer(tr(language, "fullname_prompt"))
         return
     await state.set_state(OrderPresentation.waiting_pages)
     await message.answer(
-        "Taqdimotingiz nechta sahifali bo'lsin? Kiriting:\n\n"
-        "<i>Kirish va yakuniy sahifalarni ham hisoblab kiriting!</i>",
+        tr(language, "pages_prompt"),
         parse_mode="HTML",
     )
 
 
 @router.message(OrderPresentation.waiting_pages)
 async def process_pages(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     ok, value = is_valid_pages(message.text or "", MIN_PAGES, MAX_PAGES)
     if not ok:
-        await message.answer(f"Iltimos, faqat raqam kiriting ({MIN_PAGES}-{MAX_PAGES} oralig'ida).")
+        await message.answer(tr(language, "pages_invalid", minimum=MIN_PAGES, maximum=MAX_PAGES))
         return
     await state.update_data(pages=value)
     await state.set_state(OrderPresentation.waiting_fullname)
-    await message.answer("Taqdimot yuzi uchun o'z ism-familiyangizni (otasini ismi ixtiyoriy) kiriting:")
+    await message.answer(tr(language, "fullname_prompt"))
 
 
 @router.message(OrderPresentation.waiting_fullname)
 async def process_fullname(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     if not is_valid_full_name(message.text or ""):
-        await message.answer("Kiritilgan jumla ism emas. Iltimos isminizni kiriting!")
+        await message.answer(tr(language, "fullname_invalid"))
         return
     await state.update_data(full_name=message.text.strip())
     await state.set_state(OrderPresentation.waiting_institution)
     await message.answer(
-        "Taqdimot yuzi uchun ta'lim muassasasi nomini to'liq kiriting:\n"
-        "<i>(Bu band ixtiyoriy — o'tkazib yuborishingiz mumkin)</i>",
+        tr(language, "institution_prompt"),
         parse_mode="HTML",
-        reply_markup=skip_kb(),
+        reply_markup=skip_kb(language),
     )
 
 
 @router.message(OrderPresentation.waiting_institution)
 async def process_institution(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     if not is_valid_optional_text(message.text or ""):
-        await message.answer("Iltimos, muassasa nomini to'g'ri kiriting yoki o'tkazib yuboring.")
+        await message.answer(tr(language, "institution_invalid"))
         return
     await state.update_data(institution=message.text.strip())
     await ask_direction(message, state)
@@ -205,12 +219,12 @@ async def skip_institution(callback: CallbackQuery, state: FSMContext):
 
 
 async def ask_direction(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     await state.set_state(OrderPresentation.waiting_direction)
     await message.answer(
-        "Yo'nalish nomi va guruhingizni kiriting:\n"
-        "<i>(Bu band ham ixtiyoriy — o'tkazib yuborishingiz mumkin)</i>",
+        tr(language, "direction_prompt"),
         parse_mode="HTML",
-        reply_markup=skip_kb(),
+        reply_markup=skip_kb(language),
     )
 
 
@@ -224,8 +238,9 @@ async def after_direction(message: Message, state: FSMContext, from_user: User):
 
 @router.message(OrderPresentation.waiting_direction)
 async def process_direction(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     if not is_valid_optional_text(message.text or ""):
-        await message.answer("Iltimos, yo'nalish/guruh nomini to'g'ri kiriting yoki o'tkazib yuboring.")
+        await message.answer(tr(language, "direction_invalid"))
         return
     await state.update_data(direction=message.text.strip())
     await after_direction(message, state, message.from_user)
@@ -239,10 +254,10 @@ async def skip_direction(callback: CallbackQuery, state: FSMContext):
 
 
 async def ask_language(message: Message, state: FSMContext):
+    language = await _ui_language(message.from_user.id)
     await state.set_state(OrderPresentation.waiting_language)
     await message.answer(
-        "Taqdimot qaysi tilda tayyorlansin?\n"
-        f"<i>O'zbek tilidan boshqa tillarda narx sahifasiga +1.000 so'm (Bepul ta'rifda yo'q).</i>",
+        tr(language, "output_language_prompt"),
         parse_mode="HTML",
         reply_markup=language_choice_kb("pres_lang"),
     )
@@ -256,13 +271,13 @@ async def process_language(callback: CallbackQuery, state: FSMContext):
 
 
 async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
+    language = await _ui_language(message.from_user.id)
     await state.set_state(OrderPresentation.waiting_tariff)
     data = await state.get_data()
-    keyboard = free_tariff_kb() if data.get("ai_only_free") else tariff_kb()
+    keyboard = free_tariff_kb(language) if data.get("ai_only_free") else tariff_kb()
     text = (
-        ("AI taqdimot uchun hozircha faqat bepul tarif mavjud.\n\n" if data.get("ai_only_free") else "")
-        + "Ta'rif turini tanlang:\n\n"
-        "<i>Narxlar taqdimotning bir sahifasi uchun ko'rsatilgan.</i>"
+        (tr(language, "ai_free_only") + "\n\n" if data.get("ai_only_free") else "")
+        + tr(language, "tariff_prompt")
     )
     if edit:
         try:
@@ -278,9 +293,14 @@ async def process_tariff(callback: CallbackQuery, state: FSMContext):
     tariff_key = callback.data.split(":", 1)[1]
     data = await state.get_data()
     if data.get("ai_only_free") and tariff_key != "bepul":
-        await callback.answer("AI orqali hozircha faqat bepul tarif ishlaydi.", show_alert=True)
+        await callback.answer(tr(await _ui_language(callback.from_user.id), "ai_free_only"), show_alert=True)
         return
     await callback.answer()
+    if data.get("ai_only_free"):
+        from bot.handlers.manual_presentation import begin_manual_presentation
+
+        await begin_manual_presentation(callback, state, data)
+        return
     await build_summary(callback.message, state, tariff_key, callback.from_user)
 
 

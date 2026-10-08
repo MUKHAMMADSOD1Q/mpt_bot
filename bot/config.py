@@ -100,7 +100,7 @@ INDEPENDENT_WORK_TYPES = {
 }
 # O'zbek tilidan boshqa har qanday tilda bajarilsa, 1 sahifaga qo'shimcha narx (so'm)
 LANGUAGE_SURCHARGE_PER_PAGE = 1000
-WORK_LANGUAGES = ["O'zbek", "Rus", "Ingliz", "Boshqa"]
+WORK_LANGUAGES = ["O'zbek", "Русский", "English", "Тоҷикӣ", "Қазақша", "Кыргызча", "Türkmençe"]
 
 # ---- "Tadbirkorlar uchun" xizmatlari narxlari ----
 TAKLIFNOMA_PRICE = 50_000

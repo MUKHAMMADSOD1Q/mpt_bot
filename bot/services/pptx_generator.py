@@ -207,3 +207,116 @@ def build_presentation(
 
     prs.save(output_path)
     return output_path
+
+
+def build_manual_presentation(
+    template_path: str,
+    output_path: str,
+    topic: str,
+    full_name: str,
+    institution: str,
+    direction: str,
+    paragraphs: list[str],
+    image_paths: list[str],
+) -> str:
+    total_pages = len(paragraphs)
+    if not total_pages:
+        raise ValueError("Taqdimot uchun kamida bitta abzats kerak.")
+    if len(image_paths) > total_pages:
+        raise ValueError("Har bir slaydga bittadan ortiq rasm joylab bo'lmaydi.")
+
+    prs = Presentation(template_path)
+    if len(prs.slides) < 2:
+        raise ValueError("Tanlangan shablonda kontent slaydi topilmadi.")
+
+    while len(prs.slides) < total_pages:
+        _duplicate_slide(prs, 1)
+    while len(prs.slides) > total_pages:
+        _remove_slide(prs, len(prs.slides) - 1)
+
+    width = prs.slide_width / 914400
+    height = prs.slide_height / 914400
+    margin_x = width * 0.12
+    title_y = height * 0.08
+    title_height = height * 0.11
+    body_y = height * 0.23
+    body_height = height * 0.65
+    text_width = width * 0.76
+    image_slide_indexes = {
+        min(total_pages - 1, index * total_pages // len(image_paths))
+        for index in range(len(image_paths))
+    } if image_paths else set()
+    image_by_slide = dict(zip(sorted(image_slide_indexes), image_paths))
+
+    details = "  |  ".join(value for value in (full_name, institution, direction) if value)
+    for slide_index, slide in enumerate(prs.slides):
+        has_image = slide_index in image_by_slide
+        current_text_width = width * 0.51 if has_image else text_width
+        _add_textbox(
+            slide,
+            margin_x,
+            title_y,
+            width * 0.76,
+            title_height,
+            topic,
+            28,
+            bold=True,
+        )
+        paragraph_shape = slide.shapes.add_textbox(
+            Inches(margin_x),
+            Inches(body_y),
+            Inches(current_text_width),
+            Inches(body_height),
+        )
+        frame = paragraph_shape.text_frame
+        frame.clear()
+        frame.word_wrap = True
+        frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+        frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+        frame.margin_left = Inches(0.12)
+        frame.margin_right = Inches(0.12)
+        frame.margin_top = Inches(0.08)
+        frame.margin_bottom = Inches(0.08)
+        paragraph = frame.paragraphs[0]
+        paragraph.text = paragraphs[slide_index].strip()
+        paragraph.alignment = PP_ALIGN.LEFT
+        paragraph.font.name = "Arial"
+        paragraph.font.size = Pt(22)
+        paragraph.font.color.rgb = RGBColor(45, 55, 72)
+
+        if has_image:
+            picture = slide.shapes.add_picture(
+                image_by_slide[slide_index],
+                Inches(width * 0.69),
+                Inches(body_y + body_height * 0.17),
+            )
+            box_width = Inches(width * 0.25)
+            box_height = Inches(body_height * 0.66)
+            scale = min(box_width / picture.width, box_height / picture.height)
+            picture.width = int(picture.width * scale)
+            picture.height = int(picture.height * scale)
+            picture.left = Inches(width * 0.69) + int((box_width - picture.width) / 2)
+            picture.top = Inches(body_y + body_height * 0.17) + int((box_height - picture.height) / 2)
+
+        if details and slide_index == 0:
+            _add_textbox(
+                slide,
+                margin_x,
+                height * 0.91,
+                width * 0.76,
+                height * 0.045,
+                details,
+                12,
+            )
+        _add_textbox(
+            slide,
+            width * 0.87,
+            height * 0.92,
+            width * 0.08,
+            height * 0.04,
+            f"{slide_index + 1}/{total_pages}",
+            12,
+        )
+
+    prs.save(output_path)
+    return output_path

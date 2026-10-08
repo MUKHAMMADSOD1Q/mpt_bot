@@ -61,16 +61,30 @@ Quyida **nolldan production'gacha** bo'lgan barcha qadamlar yozilgan.
 
 ### AI yordamida taqdimot tayyorlash
 
-1. [Google AI Studio](https://aistudio.google.com/apikey) orqali Gemini API kaliti yarating.
-2. Lokal ishga tushirishda `.env` faylidagi `GEMINI_API_KEY` qiymatini to'ldiring; Railway'da
-   **Variables** bo'limiga `GEMINI_API_KEY` nomli maxfiy o'zgaruvchi qo'shing. Kalitni chatga yoki GitHub'ga yubormang.
-3. Bot restart/deploy bo'lgach, “🤖 Sun'iy intellekt yordamida” bo'limi mavzuni so'rab,
-   bepul taqdimot buyurtmasini boshlaydi. Shuningdek, oddiy buyurtmada “Bepul” tarifi
-   tanlansa, to'lov tasdiqlangach Gemini matnlarni tayyorlab `.pptx`ni yuboradi.
-   Generatsiya uchta `assets/templates/bepul/1.pptx`, `2.pptx`, `3.pptx` shablonidan
-   tasodifiy bittasiga joylanadi; boshqa tariflar hozircha AI bilan generatsiya qilinmaydi.
-4. API kaliti yo'q yoki Gemini vaqtincha ishlamasa, buyurtma yo'qolmaydi: fayllar guruhida
-   qo'lda tayyorlash uchun buyurtma va sabab ko'rsatiladi.
+1. Asosiy menyudagi **⚙️ Sozlamalar → 🌐 Tilni sozlash** orqali interfeys tilini tanlang:
+   o'zbek, rus, ingliz, tojik, qozoq, qirg'iz yoki turkman.
+2. **🤖 Sun'iy intellekt yordamida** bo'limida mavzu, sahifalar soni va titul sahifasi
+   ma'lumotlarini kiriting. Bot AI promptni alohida, nusxalashga qulay monospace blokda beradi.
+3. Promptni o'zingiz ishonadigan AI xizmatiga yuboring va qaytgan matnni botga jo'nating.
+   Matn aynan sahifalar sonicha abzats bo'lishi kerak; uzun matnni UTF-8 `.txt` fayl qilib yuborish mumkin.
+4. Rasmlar ixtiyoriy. Bot 8 sahifa uchun 4 tagacha, 10 sahifa uchun 6 tagacha,
+   12 sahifa uchun 8 tagacha rasm qabul qiladi; har slaydga ko'pi bilan bittadan rasm qo'yadi.
+5. Bot `assets/templates/bepul/1.pptx`, `2.pptx`, `3.pptx` shablonlaridan tasodifiy birini
+   tanlab taqdimotni tayyorlaydi. Fayl avval fayllar guruhiga ko'rib chiqish uchun yuboriladi;
+   administrator tasdiqlagandan keyingina foydalanuvchiga yetkaziladi.
+6. Oddiy buyurtmadagi bepul tarifda, Gemini API sozlangan bo'lsa, avtomatik generatsiya
+   avvalgidek ishlashi mumkin. Buning uchun [Google AI Studio](https://aistudio.google.com/apikey)
+   dan `GEMINI_API_KEY` oling va uni lokal `.env` yoki Railway **Variables** bo'limiga kiriting.
+   Kalitni chatga yoki GitHub'ga yubormang.
+
+Til sozlamasi hozir asosiy menyu, sozlamalar sahifalari va AI taqdimot buyurtma oqimini
+mahalliylashtiradi. Eski to'lov, tadbirkorlik va boshqa xizmat oqimlarining barcha xabarlari
+hali yetti tilga to'liq tarjima qilinmagan.
+
+Qo'lda AI oqimida bot tashqi AI xizmatiga o'zi ulanmaydi: promptni foydalanuvchi tanlagan
+xizmatga foydalanuvchining o'zi yuboradi. Javob matni va tanlangan rasmlardan tayyorlangan
+`.pptx` avval fayllar guruhiga admin ko'rigi uchun yuboriladi. Foydalanuvchiga fayl faqat
+admin **Tasdiqlash va yuborish** tugmasini bosgandan keyin yetkaziladi.
 
 Gemini'ning bepul API kvotasi model va loyiha bo'yicha o'zgaradi; aniq joriy RPM/RPD limitini
 [AI Studio rate limits](https://aistudio.google.com/rate-limit) sahifasida tekshiring.
