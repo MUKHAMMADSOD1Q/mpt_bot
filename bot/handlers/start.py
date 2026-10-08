@@ -1,11 +1,13 @@
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from bot.config import OWNER_ID
 from bot.database import get_or_create_user
-from bot.keyboards import main_menu_kb, admin_menu_kb, contact_kb, games_kb
+from bot.keyboards import (
+    main_menu_kb, admin_menu_kb, contact_kb, games_kb, admin_contact_prompt_kb,
+)
 from bot.states import OrderPresentation
 from bot.texts import ABOUT_US_HTML, build_guide, chunk_text
 
@@ -46,12 +48,22 @@ async def ai_menu(message: Message, state: FSMContext):
     await message.answer(
         "🤖 Hozircha AI faqat bepul taqdimot tayyorlaydi.\n"
         "Taqdimot mavzusini kiriting:",
+        reply_markup=admin_contact_prompt_kb(),
     )
 
 
 @router.message(F.text == "ℹ️ Admin bilan bog'lanish")
 async def contact_admin(message: Message):
     await message.answer("Admin bilan bog'lanish uchun quyidagilardan birini tanlang:", reply_markup=contact_kb())
+
+
+@router.callback_query(F.data == "show_admin_contacts")
+async def show_admin_contacts(callback: CallbackQuery):
+    await callback.message.answer(
+        "Admin bilan bog'lanish uchun quyidagilardan birini tanlang:",
+        reply_markup=contact_kb(),
+    )
+    await callback.answer()
 
 
 @router.message(F.text == "🎮 O'yin va ko'ngil ochish")

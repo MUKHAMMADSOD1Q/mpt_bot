@@ -46,6 +46,12 @@ def contact_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def admin_contact_prompt_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="👤 Admin bilan bog'lanish", callback_data="show_admin_contacts")
+    return builder.as_markup()
+
+
 def games_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="🧞 Akinator", url="https://en.akinator.com/")

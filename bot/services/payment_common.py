@@ -10,6 +10,7 @@ from aiogram.types import FSInputFile, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import SUBSCRIPTIONS, PAYMENT_GROUP_ID, FILES_GROUP_ID, TARIFFS, GEMINI_API_KEY
+from bot.keyboards import admin_contact_prompt_kb
 from bot.services.pricing import format_som
 from bot.database import (
     add_mpt_balance, set_subscription, set_order_status, get_order, get_user,
@@ -17,6 +18,21 @@ from bot.database import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ai_failure_message(error: Exception) -> str:
+    from bot.services.ai_content import AIContentError
+
+    if isinstance(error, AIContentError):
+        detail = str(error).casefold()
+        if "429" in detail or "quota" in detail or "rate limit" in detail:
+            return "Gemini API limiti tugagan bo'lishi mumkin. Keyinroq qayta urinib ko'ring."
+        if "401" in detail or "403" in detail or "api key" in detail or "api_key" in detail:
+            return "Gemini API kaliti noto'g'ri yoki hosting sozlamasida mavjud emas."
+        return "Gemini API so'rovida xatolik yuz berdi."
+    if isinstance(error, FileNotFoundError) or "shablon" in str(error).casefold():
+        return "PowerPoint shabloni topilmadi."
+    return "Taqdimotni yaratishda ichki xatolik yuz berdi."
 
 
 async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
@@ -206,9 +222,7 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
                 await _deliver_generated_presentation(bot, order)
                 return
             except Exception as error:
-                from bot.services.ai_content import AIContentError
-
-                reason = str(error) if isinstance(error, AIContentError) else type(error).__name__
+                reason = _ai_failure_message(error)
                 failure_reason = f"\n⚠️ AI avtomatik tayyorlay olmadi: {reason}"
                 logger.exception("Taqdimotni AI bilan tayyorlash yoki yuborish muvaffaqiyatsiz (order_id=%s)", record_id)
         elif order["tariff"] == "bepul":
@@ -229,8 +243,10 @@ async def notify_files_group_ready(bot: Bot, kind: str, record_id: int):
             try:
                 await bot.send_message(
                     order["telegram_id"],
-                    "⚠️ Bepul AI taqdimotni hozir avtomatik tayyorlay olmadi. "
-                    "Buyurtmangiz adminga yuborildi va qo'lda tayyorlanadi.",
+                    "⚠️ Bepul AI taqdimotni hozir avtomatik tayyorlay olmadi.\n"
+                    f"{failure_reason.strip()}\n"
+                    "Buyurtmangiz adminga qo'lda tayyorlash uchun yuborildi.",
+                    reply_markup=admin_contact_prompt_kb(),
                 )
             except Exception:
                 logger.exception(
