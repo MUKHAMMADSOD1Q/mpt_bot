@@ -110,7 +110,11 @@ async def begin_manual_presentation(callback: CallbackQuery, state: FSMContext, 
             pages=content_pages,
             language=data.get("language") or "O'zbek",
         )
-        await callback.message.answer(f"<pre>{html.escape(prompt)}</pre>", parse_mode="HTML")
+        await callback.message.answer(
+            f"<pre>{html.escape(prompt)}</pre>",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+        )
     await callback.message.answer(
         tr(
             ui_language,

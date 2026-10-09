@@ -12,8 +12,8 @@ from bot.keyboards import (
     bot_language_kb, back_only_kb,
 )
 from bot.states import OrderPresentation
-from bot.texts import ABOUT_US_HTML, ABOUT_US_HTML_BY_LANGUAGE, build_guide, chunk_text
-from bot.i18n import menu_labels, normalize_language, tr
+from bot.texts import ABOUT_US_HTML_BY_LANGUAGE, build_guide, chunk_text
+from bot.i18n import SUPPORTED_LANGUAGES, menu_labels, normalize_language, tr
 from bot.services.user_locale import get_user_locale
 
 router = Router()
@@ -101,7 +101,7 @@ async def settings_action(callback: CallbackQuery):
         )
     elif action == "about":
         await callback.message.answer(
-            ABOUT_US_HTML_BY_LANGUAGE.get(language, ABOUT_US_HTML),
+            ABOUT_US_HTML_BY_LANGUAGE[language],
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -116,7 +116,7 @@ async def settings_action(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("botlang:"))
 async def select_bot_language(callback: CallbackQuery):
     language = callback.data.split(":", 1)[1]
-    if language not in {"uz", "ru", "en", "tg", "kk", "ky", "tk"}:
+    if language not in SUPPORTED_LANGUAGES:
         await callback.answer(tr(language, "unknown_language"), show_alert=True)
         return
     await get_or_create_user(
@@ -155,7 +155,7 @@ async def games_menu(message: Message):
 async def about_us(message: Message):
     language = await get_user_locale(message.from_user.id)
     await message.answer(
-        ABOUT_US_HTML_BY_LANGUAGE.get(language, ABOUT_US_HTML),
+        ABOUT_US_HTML_BY_LANGUAGE[language],
         parse_mode="HTML", disable_web_page_preview=True,
     )
 

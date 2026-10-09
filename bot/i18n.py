@@ -474,6 +474,15 @@ _TEXT = {
 }
 
 _ADDITIONAL_TEXT = {
+    "admin_access_denied": (
+        "⛔ Sizga admin panelidan foydalanish huquqi berilmagan.",
+        "⛔ У вас нет доступа к панели администратора.",
+        "⛔ You do not have access to the admin panel.",
+        "⛔ Шумо иҷозати истифодаи панели маъмурро надоред.",
+        "⛔ Сізде әкімші панеліне кіруге рұқсат жоқ.",
+        "⛔ Администратор панелине кирүүгө уруксатыңыз жок.",
+        "⛔ Administrator paneline girmäge rugsadyňyz ýok.",
+    ),
     "menu_manual_presentation": (
         "✍️ Taqdimotni o'zim tayyorlayman",
         "✍️ Я подготовлю презентацию сам",
@@ -689,13 +698,13 @@ _ADDITIONAL_TEXT = {
         "📝 Tanyşdyryşy özüňiz taýýarlamak üçin maglumatlary giriziň. Ilki mowzugy ýazyň:",
     ),
     "manual_prompt_intro": (
-        "Quyidagi so'rovni o'zingiz ishongan AI xizmatiga yuboring, so'ng javobini shu botga jo'nating. Matnni o'zingiz ham tayyorlashingiz mumkin.",
-        "Отправьте запрос ниже выбранному вами ИИ, затем пришлите ответ сюда. Текст можно подготовить и самостоятельно.",
-        "Send the prompt below to an AI service you trust, then send its response here. You may also prepare the text yourself.",
-        "Дархости зеринро ба зеҳни сунъии интихобкардаатон фиристед ва ҷавобро ба ин бот ирсол кунед. Матнро худатон низ омода карда метавонед.",
-        "Төмендегі сұрауды өзіңіз сенетін ЖИ қызметіне жіберіп, жауабын осы ботқа жолдаңыз. Мәтінді өзіңіз де дайындай аласыз.",
-        "Төмөнкү суроону өзүңүз ишенген ЖИ кызматына жөнөтүп, жообун ушул ботко жибериңиз. Текстти өзүңүз да даярдай аласыз.",
-        "Aşakdaky soragy ynanýan emeli aň hyzmatyňyza iberiň we jogabyny şu bot-a ýollanyň. Teksti özüňiz hem taýýarlap bilersiňiz.",
+        "Keyingi xabardagi kod blokida nusxalashga tayyor prompt bor. Uni o'zingiz ishongan AI xizmatiga yuboring, javobini shu botga jo'nating. Matnni o'zingiz ham tayyorlashingiz mumkin.",
+        "В следующем сообщении будет запрос в блоке, который можно скопировать. Отправьте его выбранному ИИ, затем пришлите ответ сюда. Текст можно подготовить и самостоятельно.",
+        "The next message contains a copyable prompt in a code block. Send it to an AI service you trust, then send its response here. You may also prepare the text yourself.",
+        "Дар паёми навбатӣ дархост дар блоки барои нусхабардорӣ омода меояд. Онро ба зеҳни сунъии интихобкардаатон фиристед ва ҷавобро ба ин бот ирсол кунед. Матнро худатон низ омода карда метавонед.",
+        "Келесі хабарда көшіруге дайын сұрау код блогында беріледі. Оны өзіңіз сенетін ЖИ-ге жіберіп, жауабын осы ботқа жолдаңыз. Мәтінді өзіңіз де дайындай аласыз.",
+        "Кийинки билдирүүдө көчүрүүгө даяр суроо код блогунда берилет. Аны өзүңүз ишенген ЖИ кызматына жөнөтүп, жообун ушул ботко жибериңиз. Текстти өзүңүз да даярдай аласыз.",
+        "Indiki habarda göçürmäge taýýar sorag kod blokunda görkeziler. Ony ynanýan emeli aň hyzmatyňyza iberiň we jogabyny şu bot-a ýollanyň. Teksti özüňiz hem taýýarlap bilersiňiz.",
     ),
     "manual_prompt": (
         "\"{topic}\" mavzusida {pages} ta mazmuniy sahifa uchun aynan {pages} ta abzats yoz. Har bir abzats alohida sahifaga mo'ljallansin; abzatslarni bo'sh qator bilan ajrat. Taqdimot tili: {language}. Titul va yakuniy «RAHMAT!» sahifalarini yozma — ularni bot qo'shadi.",

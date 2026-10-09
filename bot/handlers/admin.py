@@ -37,10 +37,12 @@ async def is_admin(user_id: int) -> bool:
 # ==================== REJIM ====================
 
 @router.message(Command("admin"))
-async def toggle_admin_mode(message: Message):
+async def toggle_admin_mode(message: Message, state: FSMContext):
     """Adminlar uchun admin rejimini almashtiradi."""
     if not await is_admin(message.from_user.id):
+        await message.answer(tr(await get_user_locale(message.from_user.id), "admin_access_denied"))
         return
+    await state.clear()
     user = await get_or_create_user(
         message.from_user.id, message.from_user.username, message.from_user.full_name,
     )
@@ -59,9 +61,10 @@ async def toggle_admin_mode(message: Message):
 
 
 @router.message(F.text == "🔙 Oddiy rejimga qaytish")
-async def back_to_user_mode(message: Message):
+async def back_to_user_mode(message: Message, state: FSMContext):
     if not await is_admin(message.from_user.id):
         return
+    await state.clear()
     await set_admin_mode(message.from_user.id, False)
     await message.answer(
         "👤 Oddiy foydalanuvchi rejasiga qaytdingiz.",

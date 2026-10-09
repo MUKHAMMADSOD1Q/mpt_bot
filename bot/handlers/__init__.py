@@ -9,12 +9,11 @@ from . import (
 
 def get_root_router() -> Router:
     root = Router()
-    # Menyu va /start handlerlari FSM bosqichlaridan oldin tekshirilsin,
-    # shunda foydalanuvchi faol buyurtmadan ham menyu orqali chiqib keta oladi.
+    # Commands and menu handlers must precede FSM catch-all handlers.
     root.include_router(start.router)
+    root.include_router(admin.router)
     root.include_router(manual_presentation.router)
     root.include_router(navigation.router)
-    root.include_router(admin.router)
     root.include_router(files_group.router)
     root.include_router(confirm_flow.router)
     root.include_router(payment_method.router)
