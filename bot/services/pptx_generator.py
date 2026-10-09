@@ -34,6 +34,8 @@ matn yozish mumkin. Shablonning o'zidagi dekorativ shakllar saqlanadi.
 import os
 import random
 import copy
+import math
+import re
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
@@ -99,6 +101,17 @@ def _remove_slide(prs: Presentation, index: int):
     slide_id = prs.slides._sldIdLst[index]
     prs.part.drop_rel(slide_id.rId)
     prs.slides._sldIdLst.remove(slide_id)
+
+
+def presentation_filename(topic: str) -> str:
+    words = []
+    for word in topic.split():
+        safe_word = re.sub(r"[^\w]+", "", word, flags=re.UNICODE)
+        if safe_word:
+            words.append(safe_word)
+        if len(words) == 4:
+            break
+    return f"{'_'.join(words) or 'Taqdimot'}.pptx"
 
 
 def _add_textbox(slide, x: float, y: float, width: float, height: float, text: str, font_size: int, bold: bool = False):
@@ -176,8 +189,8 @@ def build_presentation(
     content_slide_index: int = 1,
 ) -> str:
     prs = Presentation(template_path)
-    if total_pages < 1 or len(slides_content) != total_pages:
-        raise ValueError("Taqdimot sahifalari soni matn sahifalari soniga mos kelmadi.")
+    if total_pages < 3 or len(slides_content) != total_pages - 2:
+        raise ValueError("Matn sahifalari soni umumiy taqdimot sahifalaridan 2 taga kam bo'lishi kerak.")
 
     mapping = {
         "{{TOPIC}}": topic,
@@ -195,15 +208,35 @@ def build_presentation(
     while len(prs.slides) > total_pages:
         _remove_slide(prs, len(prs.slides) - 1)
 
-    for slide_number, slide in enumerate(prs.slides, start=1):
+    cover = prs.slides[0]
+    _replace_placeholders(cover, mapping)
+    _add_textbox(
+        cover, 2.2, 2.6, 15.6, 1.7, topic.strip(), 36, bold=True,
+    )
+    cover_details = [full_name.strip()]
+    if institution.strip():
+        cover_details.append(institution.strip())
+    if direction.strip():
+        cover_details.append(direction.strip())
+    for index, detail in enumerate(cover_details):
+        _add_textbox(
+            cover, 2.5, 5.6 + index * 0.7, 15.0, 0.6, detail,
+            20 if index == 0 else 16, bold=index == 0,
+        )
+
+    for slide_number, slide_data in enumerate(slides_content, start=2):
+        slide = prs.slides[slide_number - 1]
         _replace_placeholders(slide, mapping)
         _add_slide_text(
-            slide, slides_content[slide_number - 1], slide_number, total_pages,
-            is_cover=slide_number == 1,
+            slide, slide_data, slide_number, total_pages, is_cover=False,
         )
-        if slide_number == 1 and (full_name or institution or direction):
-            details = "  |  ".join(value for value in (full_name, institution, direction) if value)
-            _add_textbox(slide, 2.5, 7.25, 15.0, 0.7, details, 16)
+
+    thank_you = prs.slides[-1]
+    for shape in list(thank_you.shapes):
+        shape._element.getparent().remove(shape._element)
+    _add_textbox(
+        thank_you, 2.2, 4.2, 15.6, 1.4, "RAHMAT!", 42, bold=True,
+    )
 
     prs.save(output_path)
     return output_path
@@ -219,11 +252,10 @@ def build_manual_presentation(
     paragraphs: list[str],
     image_paths: list[str],
 ) -> str:
-    total_pages = len(paragraphs)
-    if not total_pages:
+    content_pages = len(paragraphs)
+    if not content_pages:
         raise ValueError("Taqdimot uchun kamida bitta abzats kerak.")
-    if len(image_paths) > total_pages:
-        raise ValueError("Har bir slaydga bittadan ortiq rasm joylab bo'lmaydi.")
+    total_pages = content_pages + 2
 
     prs = Presentation(template_path)
     if len(prs.slides) < 2:
@@ -236,36 +268,51 @@ def build_manual_presentation(
 
     width = prs.slide_width / 914400
     height = prs.slide_height / 914400
-    margin_x = width * 0.12
-    title_y = height * 0.08
-    title_height = height * 0.11
-    body_y = height * 0.23
-    body_height = height * 0.65
-    text_width = width * 0.76
-    image_slide_indexes = {
-        min(total_pages - 1, index * total_pages // len(image_paths))
-        for index in range(len(image_paths))
-    } if image_paths else set()
-    image_by_slide = dict(zip(sorted(image_slide_indexes), image_paths))
-
-    details = "  |  ".join(value for value in (full_name, institution, direction) if value)
-    for slide_index, slide in enumerate(prs.slides):
-        has_image = slide_index in image_by_slide
-        current_text_width = width * 0.51 if has_image else text_width
+    cover = prs.slides[0]
+    _add_textbox(
+        cover,
+        width * 0.08,
+        height * 0.28,
+        width * 0.84,
+        height * 0.18,
+        topic.strip(),
+        36,
+        bold=True,
+    )
+    cover_details = [full_name.strip()]
+    if institution.strip():
+        cover_details.append(institution.strip())
+    if direction.strip():
+        cover_details.append(direction.strip())
+    details_y = height * 0.52
+    for index, detail in enumerate(cover_details):
         _add_textbox(
-            slide,
-            margin_x,
-            title_y,
+            cover,
+            width * 0.12,
+            details_y + index * height * 0.075,
             width * 0.76,
-            title_height,
-            topic,
-            28,
-            bold=True,
+            height * 0.065,
+            detail,
+            20 if index == 0 else 16,
+            bold=index == 0,
         )
+
+    images_by_page: dict[int, list[str]] = {}
+    for index, image_path in enumerate(image_paths):
+        page_index = min(content_pages - 1, index * content_pages // len(image_paths))
+        images_by_page.setdefault(page_index, []).append(image_path)
+
+    for page_index, paragraph_text in enumerate(paragraphs):
+        slide = prs.slides[page_index + 1]
+        page_images = images_by_page.get(page_index, [])
+        margin_x = width * 0.08
+        body_y = height * 0.18
+        body_height = height * 0.66
+        text_width = width * (0.51 if page_images else 0.84)
         paragraph_shape = slide.shapes.add_textbox(
             Inches(margin_x),
             Inches(body_y),
-            Inches(current_text_width),
+            Inches(text_width),
             Inches(body_height),
         )
         frame = paragraph_shape.text_frame
@@ -278,45 +325,56 @@ def build_manual_presentation(
         frame.margin_top = Inches(0.08)
         frame.margin_bottom = Inches(0.08)
         paragraph = frame.paragraphs[0]
-        paragraph.text = paragraphs[slide_index].strip()
+        paragraph.text = paragraph_text.strip()
         paragraph.alignment = PP_ALIGN.LEFT
         paragraph.font.name = "Arial"
         paragraph.font.size = Pt(22)
         paragraph.font.color.rgb = RGBColor(45, 55, 72)
 
-        if has_image:
-            picture = slide.shapes.add_picture(
-                image_by_slide[slide_index],
-                Inches(width * 0.69),
-                Inches(body_y + body_height * 0.17),
-            )
-            box_width = Inches(width * 0.25)
-            box_height = Inches(body_height * 0.66)
-            scale = min(box_width / picture.width, box_height / picture.height)
-            picture.width = int(picture.width * scale)
-            picture.height = int(picture.height * scale)
-            picture.left = Inches(width * 0.69) + int((box_width - picture.width) / 2)
-            picture.top = Inches(body_y + body_height * 0.17) + int((box_height - picture.height) / 2)
+        if page_images:
+            image_x = width * 0.62
+            image_y = body_y
+            image_width = width * 0.30
+            image_height = body_height
+            columns = math.ceil(math.sqrt(len(page_images)))
+            rows = math.ceil(len(page_images) / columns)
+            cell_width = Inches(image_width / columns)
+            cell_height = Inches(image_height / rows)
+            for image_index, image_path in enumerate(page_images):
+                column = image_index % columns
+                row = image_index // columns
+                picture = slide.shapes.add_picture(
+                    image_path,
+                    Inches(image_x + column * image_width / columns),
+                    Inches(image_y + row * image_height / rows),
+                )
+                box_width = max(1, int(cell_width) - Inches(0.12))
+                box_height = max(1, int(cell_height) - Inches(0.12))
+                scale = min(box_width / picture.width, box_height / picture.height)
+                picture.width = int(picture.width * scale)
+                picture.height = int(picture.height * scale)
+                picture.left = (
+                    Inches(image_x + column * image_width / columns)
+                    + int((cell_width - picture.width) / 2)
+                )
+                picture.top = (
+                    Inches(image_y + row * image_height / rows)
+                    + int((cell_height - picture.height) / 2)
+                )
 
-        if details and slide_index == 0:
-            _add_textbox(
-                slide,
-                margin_x,
-                height * 0.91,
-                width * 0.76,
-                height * 0.045,
-                details,
-                12,
-            )
-        _add_textbox(
-            slide,
-            width * 0.87,
-            height * 0.92,
-            width * 0.08,
-            height * 0.04,
-            f"{slide_index + 1}/{total_pages}",
-            12,
-        )
+    thank_you = prs.slides[-1]
+    for shape in list(thank_you.shapes):
+        shape._element.getparent().remove(shape._element)
+    _add_textbox(
+        thank_you,
+        width * 0.08,
+        height * 0.38,
+        width * 0.84,
+        height * 0.24,
+        "RAHMAT!",
+        42,
+        bold=True,
+    )
 
     prs.save(output_path)
     return output_path

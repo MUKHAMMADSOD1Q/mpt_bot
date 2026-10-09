@@ -19,6 +19,7 @@ def _balance_actions_kb(language: str):
     builder = InlineKeyboardBuilder()
     builder.button(text=tr(language, "buy_mpt"), callback_data="menu:buympt")
     builder.button(text=tr(language, "buy_subscription"), callback_data="menu:subs")
+    builder.button(text=tr(language, "menu_back"), callback_data="nav:back")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -44,7 +45,7 @@ async def show_mpt_amounts(callback: CallbackQuery):
     await callback.message.answer(
         f"{tr(language, 'mpt_info', price=format_som(MPT_PRICE_SOM))}\n\n{tr(language, 'choose_mpt_amount')}",
         parse_mode="HTML",
-        reply_markup=mpt_topup_amounts_kb(),
+        reply_markup=mpt_topup_amounts_kb(language),
     )
     await callback.answer()
 

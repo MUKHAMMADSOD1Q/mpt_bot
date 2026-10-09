@@ -6,13 +6,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from bot.config import OWNER_ID
-from bot.database import get_or_create_user, set_user_language
+from bot.database import get_or_create_user, set_admin_mode, set_user_language
 from bot.keyboards import (
-    main_menu_kb, admin_menu_kb, contact_kb, games_kb, admin_contact_prompt_kb,
-    settings_kb, bot_language_kb,
+    main_menu_kb, admin_menu_kb, contact_kb, games_kb, admin_contact_prompt_kb, settings_kb,
+    bot_language_kb, back_only_kb,
 )
 from bot.states import OrderPresentation
-from bot.texts import ABOUT_US_HTML, build_guide, chunk_text
+from bot.texts import ABOUT_US_HTML, ABOUT_US_HTML_BY_LANGUAGE, build_guide, chunk_text
 from bot.i18n import menu_labels, normalize_language, tr
 from bot.services.user_locale import get_user_locale
 
@@ -25,10 +25,13 @@ def _menu_for(user: dict, user_id: int):
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
     user = await get_or_create_user(
         message.from_user.id, message.from_user.username, message.from_user.full_name,
     )
+    await set_admin_mode(message.from_user.id, False)
+    user["is_admin_mode"] = 0
     language = normalize_language(user.get("lang"))
     text = tr(language, "start", name=html.escape(message.from_user.full_name))
     await message.answer(text, reply_markup=_menu_for(user, message.from_user.id))
@@ -44,18 +47,26 @@ async def cmd_menu(message: Message):
 
 
 @router.message(F.text.in_(menu_labels("ai")))
-@router.message(F.text.in_(menu_labels("manual_presentation")))
 async def ai_menu(message: Message, state: FSMContext):
-    from bot.database import get_user
-
     await state.clear()
-    await state.update_data(ai_only_free=True)
+    await state.update_data(ai_only_free=True, manual_mode=False)
     await state.set_state(OrderPresentation.waiting_topic)
-    user = await get_user(message.from_user.id)
-    language = normalize_language(user.get("lang") if user else None)
+    language = await get_user_locale(message.from_user.id)
     await message.answer(
         tr(language, "ai_start"),
         reply_markup=admin_contact_prompt_kb(language),
+    )
+
+
+@router.message(F.text.in_(menu_labels("manual_presentation")))
+async def manual_presentation_menu(message: Message, state: FSMContext):
+    await state.clear()
+    await state.update_data(ai_only_free=True, manual_mode=True)
+    await state.set_state(OrderPresentation.waiting_topic)
+    language = await get_user_locale(message.from_user.id)
+    await message.answer(
+        tr(language, "manual_start"),
+        reply_markup=back_only_kb(language),
     )
 
 
@@ -81,7 +92,7 @@ async def settings_action(callback: CallbackQuery):
     if action == "language":
         await callback.message.answer(
             tr(language, "language_title"),
-            reply_markup=bot_language_kb(),
+            reply_markup=bot_language_kb(language),
         )
     elif action == "contact":
         await callback.message.answer(
@@ -90,7 +101,7 @@ async def settings_action(callback: CallbackQuery):
         )
     elif action == "about":
         await callback.message.answer(
-            ABOUT_US_HTML if language == "uz" else tr(language, "settings_about_text"),
+            ABOUT_US_HTML_BY_LANGUAGE.get(language, ABOUT_US_HTML),
             parse_mode="HTML",
             disable_web_page_preview=True,
         )
@@ -137,14 +148,14 @@ async def show_admin_contacts(callback: CallbackQuery):
 @router.message(F.text.in_(menu_labels("games")))
 async def games_menu(message: Message):
     language = await get_user_locale(message.from_user.id)
-    await message.answer(tr(language, "games_intro"), reply_markup=games_kb())
+    await message.answer(tr(language, "games_intro"), reply_markup=games_kb(language))
 
 
 @router.message(F.text == "🤝 Biz haqimizda")
 async def about_us(message: Message):
     language = await get_user_locale(message.from_user.id)
     await message.answer(
-        ABOUT_US_HTML if language == "uz" else tr(language, "settings_about_text"),
+        ABOUT_US_HTML_BY_LANGUAGE.get(language, ABOUT_US_HTML),
         parse_mode="HTML", disable_web_page_preview=True,
     )
 

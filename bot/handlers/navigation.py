@@ -1,6 +1,6 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from bot.config import OWNER_ID
 from bot.keyboards import (
@@ -31,6 +31,17 @@ async def _show_previous(message: Message, state: FSMContext, previous, prompt: 
 
 @router.message(F.text.in_(menu_labels("back")))
 async def go_back(message: Message, state: FSMContext):
+    await _go_back_action(message, state)
+
+
+@router.callback_query(F.data == "nav:back")
+async def go_back_from_options(callback: CallbackQuery, state: FSMContext):
+    if isinstance(callback.message, Message):
+        await _go_back_action(callback.message, state)
+    await callback.answer()
+
+
+async def _go_back_action(message: Message, state: FSMContext):
     language = await get_user_locale(message.from_user.id)
     current = await state.get_state()
     data = await state.get_data()
@@ -44,26 +55,38 @@ async def go_back(message: Message, state: FSMContext):
     elif current in (PreCal.waiting_language.state, PreCal.waiting_approval.state):
         await _show_previous(message, state, PreCal.waiting_pages, tr(language, "pages_enter"))
     elif current == OrderPresentation.waiting_pages.state:
-        await _show_previous(message, state, OrderPresentation.waiting_topic, tr(language, "topic_prompt"))
+        prompt_key = "manual_topic_prompt" if data.get("manual_mode") else "topic_prompt"
+        await _show_previous(message, state, OrderPresentation.waiting_topic, tr(language, prompt_key))
     elif current == OrderPresentation.waiting_topic.state:
         await state.clear()
-        await message.answer(tr(language, "return_presentation"), reply_markup=await localized_main_menu(message.from_user.id))
+        return_key = "return_menu" if data.get("ai_only_free") else "return_presentation"
+        await message.answer(
+            tr(language, return_key),
+            reply_markup=await localized_main_menu(message.from_user.id),
+        )
     elif current == OrderPresentation.waiting_fullname.state:
         previous = OrderPresentation.waiting_topic if data.get("precal") else OrderPresentation.waiting_pages
-        prompt = tr(language, "topic_prompt") if data.get("precal") else tr(language, "pages_prompt")
+        if data.get("precal"):
+            prompt_key = "manual_topic_prompt" if data.get("manual_mode") else "topic_prompt"
+        else:
+            prompt_key = "manual_pages_prompt" if data.get("manual_mode") else "pages_prompt"
+        prompt = tr(language, prompt_key)
         await _show_previous(message, state, previous, prompt)
     elif current == OrderPresentation.waiting_institution.state:
         await _show_previous(message, state, OrderPresentation.waiting_fullname,
-                             tr(language, "fullname_prompt"))
+                             tr(language, "manual_fullname_prompt" if data.get("manual_mode") else "fullname_prompt"))
     elif current == OrderPresentation.waiting_direction.state:
         await _show_previous(message, state, OrderPresentation.waiting_institution,
-                             tr(language, "institution_prompt"), skip_kb(language))
+                             tr(language, "manual_institution_prompt" if data.get("manual_mode") else "institution_prompt"),
+                             skip_kb(language))
     elif current == OrderPresentation.waiting_language.state:
         await _show_previous(message, state, OrderPresentation.waiting_direction,
-                             tr(language, "direction_prompt"), skip_kb(language))
+                             tr(language, "manual_direction_prompt" if data.get("manual_mode") else "direction_prompt"),
+                             skip_kb(language))
     elif current == OrderPresentation.waiting_tariff.state:
         await _show_previous(message, state, OrderPresentation.waiting_language,
-                             tr(language, "output_language_prompt"), language_choice_kb("pres_lang"))
+                             tr(language, "manual_language_prompt" if data.get("manual_mode") else "output_language_prompt"),
+                             language_choice_kb("pres_lang", language))
     elif current == OrderConfirm.confirm1.state:
         if data.get("flow_kind") == "presentation":
             await _show_previous(message, state, OrderPresentation.waiting_tariff,

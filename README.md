@@ -64,11 +64,14 @@ Quyida **nolldan production'gacha** bo'lgan barcha qadamlar yozilgan.
 1. Asosiy menyudagi **⚙️ Sozlamalar → 🌐 Tilni sozlash** orqali interfeys tilini tanlang:
    o'zbek, rus, ingliz, tojik, qozoq, qirg'iz yoki turkman.
 2. **🤖 Sun'iy intellekt yordamida** bo'limida mavzu, sahifalar soni va titul sahifasi
-   ma'lumotlarini kiriting. Bot AI promptni alohida, nusxalashga qulay monospace blokda beradi.
+   ma'lumotlarini kiriting. Sahifalar soniga titul va yakuniy «RAHMAT!» sahifalari ham kiradi;
+   taqdimot kamida 3 sahifali bo'lishi kerak. Bot AI promptni alohida, nusxalashga qulay
+   monospace blokda beradi.
 3. Promptni o'zingiz ishonadigan AI xizmatiga yuboring va qaytgan matnni botga jo'nating.
-   Matn aynan sahifalar sonicha abzats bo'lishi kerak; uzun matnni UTF-8 `.txt` fayl qilib yuborish mumkin.
-4. Rasmlar ixtiyoriy. Bot 8 sahifa uchun 4 tagacha, 10 sahifa uchun 6 tagacha,
-   12 sahifa uchun 8 tagacha rasm qabul qiladi; har slaydga ko'pi bilan bittadan rasm qo'yadi.
+   Matnda umumiy sahifalar sonidan 2 ta kam abzats bo'lishi kerak (titul va yakuniy sahifa
+   uchun matn yozilmaydi); uzun matnni UTF-8 `.txt` fayl qilib yuborish mumkin.
+4. Rasmlar ixtiyoriy: istalgancha yuborish va tugatish tugmasi bilan ertaroq yakunlash mumkin.
+   Rasmlar kontent sahifalariga taqsimlanadi.
 5. Bot `assets/templates/bepul/1.pptx`, `2.pptx`, `3.pptx` shablonlaridan tasodifiy birini
    tanlab taqdimotni tayyorlaydi. Fayl avval fayllar guruhiga ko'rib chiqish uchun yuboriladi;
    administrator tasdiqlagandan keyingina foydalanuvchiga yetkaziladi.

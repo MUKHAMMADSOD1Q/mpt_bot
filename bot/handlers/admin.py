@@ -244,15 +244,47 @@ async def admin_stats(message: Message):
 async def admin_users_export(message: Message):
     if not await is_admin(message.from_user.id):
         return
+    if message.chat.type != "private":
+        await message.answer("Foydalanuvchilar ma'lumoti maxfiy. Eksportni adminning shaxsiy chatida oching.")
+        return
 
     users = await list_all_users_with_order_history()
+    await message.answer(f"👥 Bazada jami {len(users)} ta foydalanuvchi bor.")
+    preview = []
+    for user in users:
+        preview.append(
+            f"🆔 {user['telegram_id']} | "
+            f"Ism: {user.get('telegram_name') or '—'} | "
+            f"Ism-familiya: {user.get('full_name') or '—'} | "
+            f"Username: @{user['username']}" if user.get("username") else
+            f"🆔 {user['telegram_id']} | "
+            f"Ism: {user.get('telegram_name') or '—'} | "
+            f"Ism-familiya: {user.get('full_name') or '—'} | Username: —"
+        )
+        preview[-1] += (
+            f" | Telefon: {user.get('phone') or '—'}"
+            f" | Til: {user.get('lang') or '—'}"
+            f" | Balans: {user.get('mpt_balance') or 0} MPT"
+        )
+    if preview:
+        chunk = ""
+        for line in preview:
+            if len(chunk) + len(line) + 1 > 3500:
+                await message.answer(chunk)
+                chunk = ""
+            chunk += line + "\n"
+        if chunk:
+            await message.answer(chunk)
+    else:
+        await message.answer("Hozircha bazada foydalanuvchi yo'q.")
+
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Foydalanuvchilar"
     worksheet.append([
-        "Telegram ID", "Telegram ismi", "Username", "Telefon", "Til",
-        "MPT balans", "Obuna", "Obuna tugash sanasi", "Ro'yxatdan o'tgan",
-        "Buyurtmalar soni", "Buyurtmalar tarixi",
+        "Telegram ID", "Telegram ismi", "Ism-familiya", "Username", "Telefon",
+        "Til", "MPT balans", "Obuna", "Obuna tugash sanasi", "Admin rejimi",
+        "Ro'yxatdan o'tgan", "Buyurtmalar soni", "Buyurtmalar tarixi",
     ])
 
     for user in users:
@@ -263,12 +295,14 @@ async def admin_users_export(message: Message):
         worksheet.append([
             user["telegram_id"],
             _excel_safe_text(user.get("telegram_name")),
+            _excel_safe_text(user.get("full_name")),
             _excel_safe_text(f"@{user['username']}" if user.get("username") else ""),
             _excel_safe_text(user.get("phone")),
             _excel_safe_text(user.get("lang")),
             user.get("mpt_balance") or 0,
             _excel_safe_text(user.get("subscription_type")),
             _excel_safe_text(user.get("subscription_expiry")),
+            "Ha" if user.get("is_admin_mode") else "Yo'q",
             _excel_safe_text(user.get("created_at")),
             len(history),
             _excel_safe_text(history_text),
@@ -277,8 +311,9 @@ async def admin_users_export(message: Message):
     worksheet.freeze_panes = "A2"
     worksheet.auto_filter.ref = worksheet.dimensions
     for column, width in {
-        "A": 16, "B": 28, "C": 22, "D": 20, "E": 14, "F": 14,
-        "G": 20, "H": 24, "I": 26, "J": 18, "K": 70,
+        "A": 16, "B": 28, "C": 28, "D": 22, "E": 20, "F": 14,
+        "G": 14, "H": 20, "I": 24, "J": 14, "K": 26, "L": 18,
+        "M": 70,
     }.items():
         worksheet.column_dimensions[column].width = width
 

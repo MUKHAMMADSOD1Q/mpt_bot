@@ -37,6 +37,7 @@ async def _render_page(page: int, search: str | None = None, language: str = "uz
         text = tr(language, "soff_not_found") if search else tr(language, "soff_unavailable")
         builder = InlineKeyboardBuilder()
         builder.button(text=tr(language, "soff_open_seller"), url=SOFF_SELLER_PAGE_URL)
+        builder.button(text=tr(language, "menu_back"), callback_data="nav:back")
         return text, builder.as_markup()
 
     start = (page - 1) * SOFF_PAGE_SIZE
@@ -58,6 +59,7 @@ async def _render_page(page: int, search: str | None = None, language: str = "uz
     nav.button(text=tr(language, "soff_search"), callback_data="soff:search")
     if end < len(products):
         nav.button(text=tr(language, "soff_next"), callback_data=f"soff:page:{page + 1}")
+    nav.button(text=tr(language, "menu_back"), callback_data="nav:back")
     nav.adjust(3)
     builder.attach(nav)
 

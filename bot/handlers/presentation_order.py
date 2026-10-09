@@ -7,19 +7,20 @@ from aiogram.types import Message, CallbackQuery, User
 
 from bot.states import OrderPresentation, OrderConfirm, PreCal
 from bot.keyboards import (
-    skip_kb, language_choice_kb, presentation_entry_kb, precal_tariff_kb, precal_approve_kb,
-    free_tariff_kb,
+    back_only_kb, skip_kb, language_choice_kb, presentation_entry_kb, precal_tariff_kb,
+    precal_approve_kb, free_tariff_kb,
 )
 from bot.services.validators import is_valid_topic, is_valid_pages, is_valid_full_name, is_valid_optional_text
 from bot.services.pricing import calculate_price, format_som
 from bot.services.group_orders import begin_confirmation, tashkent_timestamp
-from bot.config import MIN_PAGES, MAX_PAGES, TARIFFS
+from bot.config import MAX_PAGES, TARIFFS
 from bot.database import get_user, update_user_telegram_profile
 from bot.i18n import menu_labels, normalize_language, tr
 from bot.keyboards import tariff_kb
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 router = Router()
+MIN_PRESENTATION_PAGES = 3
 
 
 async def _ui_language(user_id: int) -> str:
@@ -48,6 +49,7 @@ async def start_order(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         tr(language, "topic_prompt") + "\n\n<i>" + tr(language, "topic_note") + "</i>",
         parse_mode="HTML",
+        reply_markup=back_only_kb(language),
     )
     await callback.answer()
 
@@ -79,13 +81,16 @@ async def precal_tariff(callback: CallbackQuery, state: FSMContext):
 @router.message(PreCal.waiting_pages)
 async def precal_pages(message: Message, state: FSMContext):
     language = await _ui_language(message.from_user.id)
-    ok, value = is_valid_pages(message.text or "", MIN_PAGES, MAX_PAGES)
+    ok, value = is_valid_pages(message.text or "", MIN_PRESENTATION_PAGES, MAX_PAGES)
     if not ok:
-        await message.answer(tr(language, "pages_invalid_short", minimum=MIN_PAGES, maximum=MAX_PAGES))
+        await message.answer(tr(language, "pages_invalid_short", minimum=MIN_PRESENTATION_PAGES, maximum=MAX_PAGES))
         return
     await state.update_data(pages=value)
     await state.set_state(PreCal.waiting_language)
-    await message.answer(tr(language, "output_language_prompt"), reply_markup=language_choice_kb("precal_lang"))
+    await message.answer(
+        tr(language, "output_language_prompt"),
+        reply_markup=language_choice_kb("precal_lang", language),
+    )
 
 
 async def _show_precal_result(message: Message, state: FSMContext):
@@ -138,6 +143,7 @@ async def precal_cheaper(callback: CallbackQuery, state: FSMContext):
         title = tr(language, f"tariff_{key}")
         lines.append(f"• {title} — {format_som(p['price_som'])} UZS")
         builder.button(text=f"{title} — {format_som(p['price_som'])} UZS", callback_data=f"precal_pick:{key}")
+    builder.button(text=tr(language, "menu_back"), callback_data="nav:back")
     builder.adjust(1)
     await callback.message.answer("\n".join(lines), parse_mode="HTML", reply_markup=builder.as_markup())
     await callback.answer()
@@ -166,7 +172,7 @@ async def process_topic(message: Message, state: FSMContext):
         return
     await state.set_state(OrderPresentation.waiting_pages)
     await message.answer(
-        tr(language, "pages_prompt"),
+        tr(language, "manual_pages_prompt" if data.get("manual_mode") else "pages_prompt"),
         parse_mode="HTML",
     )
 
@@ -174,13 +180,17 @@ async def process_topic(message: Message, state: FSMContext):
 @router.message(OrderPresentation.waiting_pages)
 async def process_pages(message: Message, state: FSMContext):
     language = await _ui_language(message.from_user.id)
-    ok, value = is_valid_pages(message.text or "", MIN_PAGES, MAX_PAGES)
+    data = await state.get_data()
+    minimum = MIN_PRESENTATION_PAGES
+    ok, value = is_valid_pages(message.text or "", minimum, MAX_PAGES)
     if not ok:
-        await message.answer(tr(language, "pages_invalid", minimum=MIN_PAGES, maximum=MAX_PAGES))
+        error_key = "manual_pages_invalid" if data.get("manual_mode") else "pages_invalid"
+        await message.answer(tr(language, error_key, minimum=minimum, maximum=MAX_PAGES))
         return
     await state.update_data(pages=value)
     await state.set_state(OrderPresentation.waiting_fullname)
-    await message.answer(tr(language, "fullname_prompt"))
+    prompt_key = "manual_fullname_prompt" if data.get("manual_mode") else "fullname_prompt"
+    await message.answer(tr(language, prompt_key))
 
 
 @router.message(OrderPresentation.waiting_fullname)
@@ -191,8 +201,10 @@ async def process_fullname(message: Message, state: FSMContext):
         return
     await state.update_data(full_name=message.text.strip())
     await state.set_state(OrderPresentation.waiting_institution)
+    data = await state.get_data()
+    prompt_key = "manual_institution_prompt" if data.get("manual_mode") else "institution_prompt"
     await message.answer(
-        tr(language, "institution_prompt"),
+        tr(language, prompt_key),
         parse_mode="HTML",
         reply_markup=skip_kb(language),
     )
@@ -217,9 +229,11 @@ async def skip_institution(callback: CallbackQuery, state: FSMContext):
 
 async def ask_direction(message: Message, state: FSMContext):
     language = await _ui_language(message.from_user.id)
+    data = await state.get_data()
+    prompt_key = "manual_direction_prompt" if data.get("manual_mode") else "direction_prompt"
     await state.set_state(OrderPresentation.waiting_direction)
     await message.answer(
-        tr(language, "direction_prompt"),
+        tr(language, prompt_key),
         parse_mode="HTML",
         reply_markup=skip_kb(language),
     )
@@ -252,11 +266,13 @@ async def skip_direction(callback: CallbackQuery, state: FSMContext):
 
 async def ask_language(message: Message, state: FSMContext):
     language = await _ui_language(message.from_user.id)
+    data = await state.get_data()
+    prompt_key = "manual_language_prompt" if data.get("manual_mode") else "output_language_prompt"
     await state.set_state(OrderPresentation.waiting_language)
     await message.answer(
-        tr(language, "output_language_prompt"),
+        tr(language, prompt_key),
         parse_mode="HTML",
-        reply_markup=language_choice_kb("pres_lang"),
+        reply_markup=language_choice_kb("pres_lang", language),
     )
 
 
@@ -273,7 +289,10 @@ async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
     data = await state.get_data()
     keyboard = free_tariff_kb(language) if data.get("ai_only_free") else tariff_kb(language)
     text = (
-        (tr(language, "ai_free_only") + "\n\n" if data.get("ai_only_free") else "")
+        (
+            tr(language, "manual_free_only" if data.get("manual_mode") else "ai_free_only")
+            + "\n\n" if data.get("ai_only_free") else ""
+        )
         + tr(language, "tariff_prompt")
     )
     if edit:

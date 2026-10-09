@@ -39,7 +39,11 @@ def _ai_failure_message(error: Exception) -> str:
 
 async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
     from bot.services.ai_content import generate_presentation_slides
-    from bot.services.pptx_generator import build_presentation, pick_random_template
+    from bot.services.pptx_generator import (
+        build_presentation,
+        pick_random_template,
+        presentation_filename,
+    )
 
     if order["tariff"] != "bepul":
         raise ValueError("AI orqali hozircha faqat bepul tarifdagi buyurtma tayyorlanadi.")
@@ -49,8 +53,11 @@ async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
     if not template_path:
         raise RuntimeError("Taqdimot uchun PowerPoint shablon topilmadi.")
 
+    content_pages = order["pages"] - 2
+    if content_pages < 1:
+        raise ValueError("Taqdimotda titul va yakuniy sahifadan tashqari matn sahifasi bo'lishi kerak.")
     slides = await generate_presentation_slides(
-        order["topic"], order["pages"], order.get("language") or "O'zbek",
+        order["topic"], content_pages, order.get("language") or "O'zbek",
     )
     language = await get_user_locale(order["telegram_id"])
     output_path = ""
@@ -70,7 +77,7 @@ async def _deliver_generated_presentation(bot: Bot, order: dict) -> bool:
         )
         await bot.send_document(
             order["telegram_id"],
-            FSInputFile(output_path),
+            FSInputFile(output_path, filename=presentation_filename(order["topic"])),
             caption=tr(language, "generated_presentation_ready", topic=order["topic"], id=order["id"]),
         )
     finally:
@@ -105,6 +112,7 @@ def payment_method_kb(language: str = "uz"):
     builder = InlineKeyboardBuilder()
     builder.button(text=tr(language, "pay_click"), callback_data="paymethod:click")
     builder.button(text=tr(language, "pay_card"), callback_data="paymethod:card")
+    builder.button(text=tr(language, "menu_back"), callback_data="nav:back")
     builder.adjust(2)
     return builder.as_markup()
 
