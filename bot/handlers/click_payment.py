@@ -201,7 +201,7 @@ async def _show_math_question(message: Message, state: FSMContext, progress: int
     await state.update_data(game_answer=answer)
     language = await get_user_locale(message.chat.id)
     text = tr(language, "math_question", number=progress + 1, question=question)
-    markup = click_game_answers_kb(options)
+    markup = click_game_answers_kb(options, language)
     question_prefix = tr(language, "math_question", number="", question="").splitlines()[0].split("/", 1)[0]
     if message.text and message.text.startswith(question_prefix):
         await message.edit_text(text, reply_markup=markup)

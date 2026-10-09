@@ -99,22 +99,19 @@ async def begin_manual_presentation(callback: CallbackQuery, state: FSMContext, 
     )
     await state.set_state(ManualPresentation.waiting_essay)
     content_pages = content_page_count(data["pages"])
-    if data.get("manual_mode"):
-        await callback.message.answer(tr(ui_language, "manual_text_intro"))
-    else:
-        await callback.message.answer(tr(ui_language, "manual_prompt_intro"))
-        prompt = tr(
-            ui_language,
-            "manual_prompt",
-            topic=data["topic"],
-            pages=content_pages,
-            language=data.get("language") or "O'zbek",
-        )
-        await callback.message.answer(
-            f"<pre>{html.escape(prompt)}</pre>",
-            parse_mode="HTML",
-            disable_web_page_preview=True,
-        )
+    await callback.message.answer(tr(ui_language, "manual_prompt_intro"))
+    prompt = tr(
+        ui_language,
+        "manual_prompt",
+        topic=data["topic"],
+        pages=content_pages,
+        language=data.get("language") or "O'zbek",
+    )
+    await callback.message.answer(
+        f"<pre>{html.escape(prompt)}</pre>",
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
     await callback.message.answer(
         tr(
             ui_language,

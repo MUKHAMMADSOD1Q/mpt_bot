@@ -25,6 +25,7 @@ def confirm1_kb(language: str = "uz"):
     b = InlineKeyboardBuilder()
     b.button(text=tr(language, "confirm_yes"), callback_data="flow_confirm")
     b.button(text=tr(language, "cancel_payment"), callback_data="flow_cancel")
+    b.button(text=tr(language, "menu_back"), callback_data="nav:back")
     b.adjust(2)
     return b.as_markup()
 
@@ -33,6 +34,7 @@ def confirm2_kb(language: str = "uz"):
     b = InlineKeyboardBuilder()
     b.button(text=tr(language, "confirm_sure"), callback_data="flow_confirm")
     b.button(text=tr(language, "confirm_cancel"), callback_data="flow_cancel")
+    b.button(text=tr(language, "menu_back"), callback_data="nav:back")
     b.adjust(2)
     return b.as_markup()
 

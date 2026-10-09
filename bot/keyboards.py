@@ -40,7 +40,7 @@ def back_only_kb(language: str = "uz") -> ReplyKeyboardMarkup:
     )
 
 
-def _add_back_button(builder: InlineKeyboardBuilder, language: str = "uz") -> None:
+def _add_back_button(builder: InlineKeyboardBuilder, language: str) -> None:
     builder.button(text=tr(language, "menu_back"), callback_data="nav:back")
 
 
@@ -327,11 +327,11 @@ def click_wait_kb(merchant_trans_id: str, pay_url: str | None = None, language: 
     return builder.as_markup()
 
 
-def click_game_answers_kb(options: list[int]) -> InlineKeyboardMarkup:
+def click_game_answers_kb(options: list[int], language: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for option in options:
         builder.button(text=str(option), callback_data=f"clickgame:answer:{option}")
-    _add_back_button(builder)
+    _add_back_button(builder, language)
     builder.adjust(2)
     return builder.as_markup()
 
