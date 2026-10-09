@@ -434,6 +434,12 @@ Bularni yangi botga qo'shish uchun:
 5. Eski bazadagi 4 ta admin ID hisobotda ko'rsatiladi — ularni admin qilmoqchi
    bo'lsangiz, superadmin panelidagi **Adminlarni boshqarish** orqali tayinlang.
 
+Admin panelidagi son manba bazadagi 8 340 ta foydalanuvchidan ancha kam bo'lsa,
+`/importdb` hisobotini tekshiring va Railway Variables'dagi `DB_PATH` Volume ichidagi
+faylga (`/data/mpt_bot.db`) qarayotganini tasdiqlang. SQLite fayllari maxfiy bo'lgani
+uchun GitHub'ga yuklanmaydi; yangi deploy bo'sh lokal bazadan boshlangan bo'lsa, eski
+`DataBase.db` faylini import qilish kerak.
+
 MPT balansi eski bazada yo'q edi, shuning uchun barcha import qilingan foydalanuvchilar
 balansi `0` dan boshlanadi — xohlasangiz `/addmpt` orqali qo'lda qo'shib chiqishingiz mumkin.
 
@@ -475,7 +481,9 @@ yo'l bo'yicha ham qadamlarni yozib beraman.
    Volume bo'lmasa, Railway konteynerni har safar qayta ishga tushirganda (deploy,
    restart) bazangiz **o'chib ketadi** — bu eng ko'p uchraydigan xato.
 6. **Deploy** tugmasini bosing. Bir necha daqiqadan so'ng bot ishga tushadi (loglarni
-   Railway paneli ichidan kuzatib turishingiz mumkin).
+   Railway paneli ichidan kuzatib turishingiz mumkin). Logda `DB_PATH` hamda
+   `Bazadagi foydalanuvchilar soni` ko'rsatiladi; son kutilganidan kam bo'lsa, deploy
+   ishlatayotgan bazani va 9.1-bo'limdagi importni tekshiring.
 7. Botingizga `/start` yozib tekshiring, so'ng shaxsiy chatda `DataBase.db` faylini
    `/importdb` bilan yuboring (9.1-bo'lim).
 8. Vaqti-vaqti bilan (masalan haftada bir) shaxsiy chatda `/backupdb` buyrug'ini

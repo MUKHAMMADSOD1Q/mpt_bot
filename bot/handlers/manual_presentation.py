@@ -34,16 +34,22 @@ router = Router()
 logger = logging.getLogger(__name__)
 ALLOWED_TEMPLATES = ("1.pptx", "2.pptx", "3.pptx")
 MAX_TEXT_FILE_BYTES = 256_000
+SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/jpeg", "image/png", "image/gif", "image/bmp", "image/tiff",
+}
+SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff"}
 
 
-def _paragraphs_from_text(text: str, expected: int) -> list[str] | None:
+def _paragraphs_from_text(text: str, expected: int | None = None) -> list[str] | None:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
     paragraphs = [part.strip() for part in re.split(r"\n\s*\n+", normalized) if part.strip()]
-    if len(paragraphs) != expected:
+    if expected is not None and len(paragraphs) != expected:
         lines = [line.strip() for line in normalized.splitlines() if line.strip()]
         if len(lines) == expected:
             paragraphs = lines
-    return paragraphs if len(paragraphs) == expected else None
+    if not paragraphs or (expected is not None and len(paragraphs) != expected):
+        return None
+    return paragraphs
 
 
 def content_page_count(total_pages: int) -> int:
@@ -121,20 +127,51 @@ async def begin_manual_presentation(callback: CallbackQuery, state: FSMContext, 
     )
 
 
-async def _receive_essay(message: Message, state: FSMContext, bot: Bot, text: str):
+async def _receive_essay(
+    message: Message,
+    state: FSMContext,
+    bot: Bot,
+    text: str,
+    allow_multiple_messages: bool = True,
+):
     data = await state.get_data()
     language = normalize_language(data.get("manual_ui_language"))
-    paragraphs = _paragraphs_from_text(text, content_page_count(data["pages"]))
+    expected = content_page_count(data["pages"])
+    text_parts = list(data.get("manual_text_parts", [])) if allow_multiple_messages else []
+    text_parts.append(text.strip())
+    combined_text = "\n\n".join(part for part in text_parts if part)
+    paragraphs = _paragraphs_from_text(combined_text, expected)
     if not paragraphs:
+        partial_paragraphs = _paragraphs_from_text(combined_text)
+        if (
+            allow_multiple_messages
+            and partial_paragraphs
+            and len(partial_paragraphs) < expected
+        ):
+            await state.update_data(manual_text_parts=text_parts)
+            await message.answer(
+                tr(
+                    language,
+                    "manual_text_part_received",
+                    received=len(partial_paragraphs),
+                    total=expected,
+                ),
+            )
+            return
+        await state.update_data(manual_text_parts=[])
         await message.answer(
-            tr(language, "manual_text_invalid", pages=content_page_count(data["pages"])),
+            tr(language, "manual_text_invalid", pages=expected),
         )
         return
 
-    await state.update_data(manual_paragraphs=paragraphs, manual_image_file_ids=[])
+    await state.update_data(
+        manual_paragraphs=paragraphs,
+        manual_image_file_ids=[],
+        manual_text_parts=[],
+    )
     await state.set_state(ManualPresentation.waiting_photos)
     await message.answer(
-        tr(language, "manual_photos_intro"),
+        tr(language, "manual_photos_intro", count=expected),
         reply_markup=manual_photo_kb(language),
     )
 
@@ -163,17 +200,46 @@ async def receive_manual_essay_file(message: Message, state: FSMContext, bot: Bo
     except UnicodeDecodeError:
         await message.answer(tr(language, "manual_txt_encoding"))
         return
-    await _receive_essay(message, state, bot, text)
+    await _receive_essay(message, state, bot, text, allow_multiple_messages=False)
 
 
 @router.message(ManualPresentation.waiting_photos, F.photo)
-async def receive_manual_photo(message: Message, state: FSMContext):
+async def receive_manual_photo(message: Message, state: FSMContext, bot: Bot):
+    await _store_manual_image(message, state, bot, message.photo[-1].file_id)
+
+
+@router.message(ManualPresentation.waiting_photos, F.document)
+async def receive_manual_image_document(message: Message, state: FSMContext, bot: Bot):
+    document = message.document
+    if not document or document.mime_type not in SUPPORTED_IMAGE_MIME_TYPES:
+        data = await state.get_data()
+        language = normalize_language(data.get("manual_ui_language"))
+        await message.answer(tr(language, "manual_image_unsupported"))
+        return
+    await _store_manual_image(message, state, bot, document.file_id)
+
+
+async def _store_manual_image(message: Message, state: FSMContext, bot: Bot, file_id: str):
     data = await state.get_data()
     language = normalize_language(data.get("manual_ui_language"))
-    image_file_ids = data.get("manual_image_file_ids", [])
-    image_file_ids.append(message.photo[-1].file_id)
+    image_file_ids = list(data.get("manual_image_file_ids", []))
+    image_count = content_page_count(data["pages"])
+    if len(image_file_ids) >= image_count:
+        await message.answer(tr(language, "manual_photo_limit"))
+        return
+    image_file_ids.append(file_id)
     await state.update_data(manual_image_file_ids=image_file_ids)
-    await message.answer(tr(language, "manual_photo_added"))
+    await message.answer(
+        tr(
+            language,
+            "manual_photo_added",
+            received=len(image_file_ids),
+            count=image_count,
+        ),
+    )
+    if len(image_file_ids) == image_count:
+        await message.answer(tr(language, "manual_photo_limit"))
+        await _generate_and_send_for_review(message, state, bot)
 
 
 @router.message(ManualPresentation.waiting_photos)
@@ -181,7 +247,11 @@ async def reject_non_photo_in_photo_step(message: Message, state: FSMContext):
     data = await state.get_data()
     language = normalize_language(data.get("manual_ui_language"))
     await message.answer(
-        tr(language, "manual_photos_intro"),
+        tr(
+            language,
+            "manual_photos_intro",
+            count=content_page_count(data["pages"]),
+        ),
         reply_markup=manual_photo_kb(language),
     )
 
@@ -232,10 +302,14 @@ async def _generate_and_send_for_review(message: Message, state: FSMContext, bot
 
         image_paths = []
         for file_id in data.get("manual_image_file_ids", []):
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as image_file:
+            telegram_file = await bot.get_file(file_id)
+            extension = os.path.splitext(telegram_file.file_path or "")[1].lower() or ".jpg"
+            if extension not in SUPPORTED_IMAGE_EXTENSIONS:
+                raise ValueError(f"Unsupported image extension returned by Telegram: {extension}")
+            with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as image_file:
                 image_path = image_file.name
             temp_paths.append(image_path)
-            downloaded = await bot.download(file_id, destination=image_path)
+            downloaded = await bot.download(telegram_file, destination=image_path)
             if downloaded is None:
                 raise RuntimeError("Telegram returned no image data for the presentation.")
             image_paths.append(image_path)

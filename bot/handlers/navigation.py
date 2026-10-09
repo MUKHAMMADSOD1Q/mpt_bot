@@ -31,18 +31,18 @@ async def _show_previous(message: Message, state: FSMContext, previous, prompt: 
 
 @router.message(F.text.in_(menu_labels("back")))
 async def go_back(message: Message, state: FSMContext):
-    await _go_back_action(message, state)
+    await _go_back_action(message, state, message.from_user.id)
 
 
 @router.callback_query(F.data == "nav:back")
 async def go_back_from_options(callback: CallbackQuery, state: FSMContext):
     if isinstance(callback.message, Message):
-        await _go_back_action(callback.message, state)
+        await _go_back_action(callback.message, state, callback.from_user.id)
     await callback.answer()
 
 
-async def _go_back_action(message: Message, state: FSMContext):
-    language = await get_user_locale(message.from_user.id)
+async def _go_back_action(message: Message, state: FSMContext, user_id: int):
+    language = await get_user_locale(user_id)
     current = await state.get_state()
     data = await state.get_data()
 
@@ -51,7 +51,7 @@ async def _go_back_action(message: Message, state: FSMContext):
                              tr(language, "tariff_prompt"), precal_tariff_kb(language))
     elif current == PreCal.waiting_tariff.state:
         await state.clear()
-        await message.answer(tr(language, "return_presentation"), reply_markup=await localized_main_menu(message.from_user.id))
+        await message.answer(tr(language, "return_presentation"), reply_markup=await localized_main_menu(user_id))
     elif current in (PreCal.waiting_language.state, PreCal.waiting_approval.state):
         await _show_previous(message, state, PreCal.waiting_pages, tr(language, "pages_enter"))
     elif current == OrderPresentation.waiting_pages.state:
@@ -62,7 +62,7 @@ async def _go_back_action(message: Message, state: FSMContext):
         return_key = "return_menu" if data.get("ai_only_free") else "return_presentation"
         await message.answer(
             tr(language, return_key),
-            reply_markup=await localized_main_menu(message.from_user.id),
+            reply_markup=await localized_main_menu(user_id),
         )
     elif current == OrderPresentation.waiting_fullname.state:
         previous = OrderPresentation.waiting_topic if data.get("precal") else OrderPresentation.waiting_pages
@@ -119,7 +119,7 @@ async def _go_back_action(message: Message, state: FSMContext):
                              tr(language, "ind_type"), independent_work_type_kb(language))
     elif current == IndependentWork.waiting_type.state:
         await state.clear()
-        await message.answer(tr(language, "return_menu"), reply_markup=await localized_main_menu(message.from_user.id))
+        await message.answer(tr(language, "return_menu"), reply_markup=await localized_main_menu(user_id))
     elif current == IndependentWork.waiting_pages.state:
         await _show_previous(message, state, IndependentWork.waiting_topic, tr(language, "topic_enter"))
     elif current == IndependentWork.waiting_images.state:
@@ -145,13 +145,13 @@ async def _go_back_action(message: Message, state: FSMContext):
         payment = await get_click_payment(merchant_trans_id) if merchant_trans_id else None
         await state.clear()
         if payment:
-            await message.answer(tr(language, "return_payment"), reply_markup=await localized_main_menu(message.from_user.id))
+            await message.answer(tr(language, "return_payment"), reply_markup=await localized_main_menu(user_id))
             await message.answer(
                 tr(language, "continue_payment"),
                 reply_markup=click_wait_kb(merchant_trans_id, build_checkout_url(payment["amount_som"], merchant_trans_id), language),
             )
         else:
-            await message.answer(tr(language, "return_menu"), reply_markup=await localized_main_menu(message.from_user.id))
+            await message.answer(tr(language, "return_menu"), reply_markup=await localized_main_menu(user_id))
     elif current == CardPayment.waiting_receipt.state:
         await _show_previous(message, state, CardPayment.waiting_phone,
                              tr(language, "card_phone_prompt"))
@@ -223,13 +223,13 @@ async def _go_back_action(message: Message, state: FSMContext):
         await state.clear()
         await message.answer(
             tr(language, "return_products"),
-            reply_markup=await localized_main_menu(message.from_user.id),
+            reply_markup=await localized_main_menu(user_id),
         )
     else:
         await state.clear()
-        user = await get_user(message.from_user.id)
+        user = await get_user(user_id)
         markup = (
-            admin_menu_kb(super_admin=message.from_user.id == OWNER_ID)
-            if user and user.get("is_admin_mode") else await localized_main_menu(message.from_user.id)
+            admin_menu_kb(super_admin=user_id == OWNER_ID)
+            if user and user.get("is_admin_mode") else await localized_main_menu(user_id)
         )
         await message.answer(tr(language, "return_menu"), reply_markup=markup)

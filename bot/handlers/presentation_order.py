@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, User
 from bot.states import OrderPresentation, OrderConfirm, PreCal
 from bot.keyboards import (
     back_only_kb, skip_kb, language_choice_kb, presentation_entry_kb, precal_tariff_kb,
-    precal_approve_kb, free_tariff_kb,
+    precal_approve_kb, manual_start_kb,
 )
 from bot.services.validators import is_valid_topic, is_valid_pages, is_valid_full_name, is_valid_optional_text
 from bot.services.pricing import calculate_price, format_som
@@ -93,8 +93,8 @@ async def precal_pages(message: Message, state: FSMContext):
     )
 
 
-async def _show_precal_result(message: Message, state: FSMContext):
-    language = await _ui_language(message.from_user.id)
+async def _show_precal_result(message: Message, state: FSMContext, user_id: int):
+    language = await _ui_language(user_id)
     data = await state.get_data()
     p = calculate_price(data["tariff"], data["pages"], data["language"])
     extra = ""
@@ -112,9 +112,12 @@ async def _show_precal_result(message: Message, state: FSMContext):
 
 @router.callback_query(PreCal.waiting_language, F.data.startswith("precal_lang:"))
 async def precal_language(callback: CallbackQuery, state: FSMContext):
+    if not isinstance(callback.message, Message):
+        await callback.answer()
+        return
     await state.update_data(language=callback.data.split(":", 1)[1])
     await callback.answer()
-    await _show_precal_result(callback.message, state)
+    await _show_precal_result(callback.message, state, callback.from_user.id)
 
 
 @router.callback_query(PreCal.waiting_approval, F.data == "precal_ok")
@@ -151,9 +154,12 @@ async def precal_cheaper(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(PreCal.waiting_approval, F.data.startswith("precal_pick:"))
 async def precal_pick(callback: CallbackQuery, state: FSMContext):
+    if not isinstance(callback.message, Message):
+        await callback.answer()
+        return
     await state.update_data(tariff=callback.data.split(":", 1)[1])
     await callback.answer()
-    await _show_precal_result(callback.message, state)
+    await _show_precal_result(callback.message, state, callback.from_user.id)
 
 
 # ==================== ODDIY BUYURTMA OQIMI ====================
@@ -217,18 +223,19 @@ async def process_institution(message: Message, state: FSMContext):
         await message.answer(tr(language, "institution_invalid"))
         return
     await state.update_data(institution=message.text.strip())
-    await ask_direction(message, state)
+    await ask_direction(message, state, message.from_user.id)
 
 
 @router.callback_query(OrderPresentation.waiting_institution, F.data == "skip")
 async def skip_institution(callback: CallbackQuery, state: FSMContext):
     await state.update_data(institution="")
     await callback.answer()
-    await ask_direction(callback.message, state)
+    if isinstance(callback.message, Message):
+        await ask_direction(callback.message, state, callback.from_user.id)
 
 
-async def ask_direction(message: Message, state: FSMContext):
-    language = await _ui_language(message.from_user.id)
+async def ask_direction(message: Message, state: FSMContext, user_id: int):
+    language = await _ui_language(user_id)
     data = await state.get_data()
     prompt_key = "manual_direction_prompt" if data.get("manual_mode") else "direction_prompt"
     await state.set_state(OrderPresentation.waiting_direction)
@@ -244,7 +251,7 @@ async def after_direction(message: Message, state: FSMContext, from_user: User):
     if data.get("precal"):  # ta'rif va til PreCal da tanlangan — to'g'ridan-to'g'ri xulosaga
         await build_summary(message, state, data["tariff"], from_user)
     else:
-        await ask_language(message, state)
+        await ask_language(message, state, from_user.id)
 
 
 @router.message(OrderPresentation.waiting_direction)
@@ -261,11 +268,12 @@ async def process_direction(message: Message, state: FSMContext):
 async def skip_direction(callback: CallbackQuery, state: FSMContext):
     await state.update_data(direction="")
     await callback.answer()
-    await after_direction(callback.message, state, callback.from_user)
+    if isinstance(callback.message, Message):
+        await after_direction(callback.message, state, callback.from_user)
 
 
-async def ask_language(message: Message, state: FSMContext):
-    language = await _ui_language(message.from_user.id)
+async def ask_language(message: Message, state: FSMContext, user_id: int):
+    language = await _ui_language(user_id)
     data = await state.get_data()
     prompt_key = "manual_language_prompt" if data.get("manual_mode") else "output_language_prompt"
     await state.set_state(OrderPresentation.waiting_language)
@@ -278,22 +286,23 @@ async def ask_language(message: Message, state: FSMContext):
 
 @router.callback_query(OrderPresentation.waiting_language, F.data.startswith("pres_lang:"))
 async def process_language(callback: CallbackQuery, state: FSMContext):
+    if not isinstance(callback.message, Message):
+        await callback.answer()
+        return
     await callback.answer()
     await state.update_data(language=callback.data.split(":", 1)[1])
-    await ask_tariff(callback.message, state, edit=True)
+    await ask_tariff(callback.message, state, callback.from_user.id, edit=True)
 
 
-async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
-    language = await _ui_language(message.from_user.id)
+async def ask_tariff(message: Message, state: FSMContext, user_id: int, edit: bool = False):
+    language = await _ui_language(user_id)
     await state.set_state(OrderPresentation.waiting_tariff)
     data = await state.get_data()
-    keyboard = free_tariff_kb(language) if data.get("ai_only_free") else tariff_kb(language)
+    keyboard = manual_start_kb(language) if data.get("ai_only_free") else tariff_kb(language)
     text = (
-        (
-            tr(language, "manual_free_only" if data.get("manual_mode") else "ai_free_only")
-            + "\n\n" if data.get("ai_only_free") else ""
-        )
-        + tr(language, "tariff_prompt")
+        tr(language, "manual_begin_prompt")
+        if data.get("ai_only_free")
+        else tr(language, "tariff_prompt")
     )
     if edit:
         try:
@@ -302,6 +311,21 @@ async def ask_tariff(message: Message, state: FSMContext, edit: bool = False):
         except TelegramBadRequest:
             pass
     await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+
+
+@router.callback_query(OrderPresentation.waiting_tariff, F.data == "manual:begin")
+async def begin_free_manual_presentation(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    if not data.get("ai_only_free"):
+        await callback.answer(
+            tr(await _ui_language(callback.from_user.id), "ai_free_only"),
+            show_alert=True,
+        )
+        return
+    await callback.answer()
+    from bot.handlers.manual_presentation import begin_manual_presentation
+
+    await begin_manual_presentation(callback, state, data)
 
 
 @router.callback_query(OrderPresentation.waiting_tariff, F.data.startswith("tariff:"))

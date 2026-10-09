@@ -38,6 +38,7 @@ import math
 import re
 from pptx import Presentation
 from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_FILL
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
@@ -114,6 +115,26 @@ def presentation_filename(topic: str) -> str:
     return f"{'_'.join(words) or 'Taqdimot'}.pptx"
 
 
+def _slide_text_color(slide) -> RGBColor:
+    try:
+        if slide.background.fill.type != MSO_FILL.SOLID:
+            return RGBColor(31, 41, 55)
+        rgb = slide.background.fill.fore_color.rgb
+    except (AttributeError, TypeError, ValueError):
+        return RGBColor(31, 41, 55)
+    if not rgb:
+        return RGBColor(31, 41, 55)
+
+    color = str(rgb)
+    if len(color) != 6:
+        return RGBColor(31, 41, 55)
+    red, green, blue = (int(color[i:i + 2], 16) for i in (0, 2, 4))
+    luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255
+    if luminance < 0.5:
+        return RGBColor(248, 250, 252)
+    return RGBColor(31, 41, 55)
+
+
 def _add_textbox(slide, x: float, y: float, width: float, height: float, text: str, font_size: int, bold: bool = False):
     shape = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(width), Inches(height))
     frame = shape.text_frame
@@ -131,7 +152,7 @@ def _add_textbox(slide, x: float, y: float, width: float, height: float, text: s
     paragraph.font.name = "Arial"
     paragraph.font.size = Pt(font_size)
     paragraph.font.bold = bold
-    paragraph.font.color.rgb = RGBColor(31, 41, 55)
+    paragraph.font.color.rgb = _slide_text_color(slide)
     return shape
 
 
@@ -168,7 +189,7 @@ def _add_slide_text(slide, slide_data: dict, slide_number: int, total_slides: in
         paragraph.level = 0
         paragraph.font.name = "Arial"
         paragraph.font.size = Pt(font_size)
-        paragraph.font.color.rgb = RGBColor(45, 55, 72)
+        paragraph.font.color.rgb = _slide_text_color(slide)
         paragraph.space_after = Pt(18)
 
     _add_textbox(
@@ -305,12 +326,16 @@ def build_manual_presentation(
     for page_index, paragraph_text in enumerate(paragraphs):
         slide = prs.slides[page_index + 1]
         page_images = images_by_page.get(page_index, [])
-        margin_x = width * 0.08
+        body_height = height * 0.68
         body_y = height * 0.18
-        body_height = height * 0.66
-        text_width = width * (0.51 if page_images else 0.84)
+        text_width = width * (0.43 if page_images else 0.54)
+        text_x = (
+            width * (0.08 if page_index % 2 == 0 else 0.43)
+            if page_images
+            else (width - text_width) / 2
+        )
         paragraph_shape = slide.shapes.add_textbox(
-            Inches(margin_x),
+            Inches(text_x),
             Inches(body_y),
             Inches(text_width),
             Inches(body_height),
@@ -328,13 +353,13 @@ def build_manual_presentation(
         paragraph.text = paragraph_text.strip()
         paragraph.alignment = PP_ALIGN.LEFT
         paragraph.font.name = "Arial"
-        paragraph.font.size = Pt(22)
-        paragraph.font.color.rgb = RGBColor(45, 55, 72)
+        paragraph.font.size = Pt(26)
+        paragraph.font.color.rgb = _slide_text_color(slide)
 
         if page_images:
-            image_x = width * 0.62
+            image_x = width * (0.58 if page_index % 2 == 0 else 0.08)
             image_y = body_y
-            image_width = width * 0.30
+            image_width = width * 0.31
             image_height = body_height
             columns = math.ceil(math.sqrt(len(page_images)))
             rows = math.ceil(len(page_images) / columns)

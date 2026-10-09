@@ -341,6 +341,13 @@ async def list_all_users() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+async def count_all_users() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM users")
+        row = await cur.fetchone()
+        return int(row[0])
+
+
 async def get_user_order_history(telegram_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

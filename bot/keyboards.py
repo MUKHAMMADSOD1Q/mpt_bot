@@ -255,9 +255,9 @@ def tariff_kb(language: str = "uz") -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def free_tariff_kb(language: str = "uz") -> InlineKeyboardMarkup:
+def manual_start_kb(language: str = "uz") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text=tr(language, "free_tariff"), callback_data="tariff:bepul")
+    builder.button(text=tr(language, "manual_begin"), callback_data="manual:begin")
     _add_back_button(builder, language)
     return builder.as_markup()
 

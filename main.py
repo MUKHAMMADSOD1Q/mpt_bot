@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import BOT_TOKEN, DB_PATH
-from bot.database import init_db
+from bot.database import count_all_users, init_db
 from bot.handlers import get_root_router
 
 
@@ -18,6 +18,12 @@ async def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN topilmadi! .env faylini yoki hosting Variables bo'limini tekshiring.")
 
+    if os.getenv("RAILWAY_ENVIRONMENT") and not os.getenv("DB_PATH"):
+        logging.warning(
+            "DB_PATH sozlanmagan. Railway'da doimiy Volume uchun DB_PATH=/data/mpt_bot.db "
+            "o'rnating; aks holda deploydan keyin foydalanuvchilar bazasi yo'qolishi mumkin."
+        )
+
     # Railway Volume (masalan /data) mavjud bo'lmasa ham papka yaratilsin
     db_dir = os.path.dirname(DB_PATH)
     if db_dir:
@@ -25,6 +31,7 @@ async def main():
     logging.info("Baza fayli: %s", DB_PATH)
 
     await init_db()
+    logging.info("Bazadagi foydalanuvchilar soni: %d", await count_all_users())
 
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     # Diqqat: MemoryStorage — botni qayta ishga tushirsangiz, jarayonda turgan (yarim to'ldirilgan)

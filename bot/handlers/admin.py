@@ -21,6 +21,7 @@ from bot.i18n import tr
 from bot.services.user_locale import get_user_locale
 from bot.database import (
     add_mpt_balance, get_user, set_subscription, set_admin_mode, list_all_users,
+    count_all_users,
     get_total_paid_revenue, get_or_create_user, list_open_orders, list_open_service_orders,
     get_service_order, set_service_order_price, is_admin_user, list_admin_ids,
     add_admin, remove_admin, list_all_users_with_order_history,
@@ -231,10 +232,10 @@ async def backup_db(message: Message, bot: Bot):
 async def admin_stats(message: Message):
     if not await is_admin(message.from_user.id):
         return
-    users = await list_all_users()
+    user_count = await count_all_users()
     revenue = await get_total_paid_revenue()
     text = (
-        f"👥 Jami foydalanuvchilar: {len(users)}\n\n"
+        f"👥 Jami foydalanuvchilar: {user_count}\n\n"
         f"💳 Click orqali to'lovlar: {revenue['click_count']} ta, jami {format_som(revenue['click_total'])} so'm\n"
         f"🏦 Karta orqali to'lovlar: {revenue['card_count']} ta, jami {format_som(revenue['card_total'])} so'm\n\n"
         "<i>Diqqat: bu — bot orqali qayd etilgan va tasdiqlangan to'lovlar yig'indisi, "
